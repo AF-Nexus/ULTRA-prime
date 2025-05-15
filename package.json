@@ -6,7 +6,7 @@
   "main": "index.js",
   "engines": {
     "node": ">=20.0.0"
-    },
+  },
   "scripts": {
     "run": "pm2 start index.js --deep-monitoring --attach --name qasim",
     "qasim": "pm2 start index.js --deep-monitoring --attach --name qasim",
@@ -24,7 +24,7 @@
   "license": "MIT",
   "dependencies": {
     "@hapi/boom": "^10.0.1",
-    "@whiskeysockets/baileys": "^6.7.16",
+    "@whiskeysockets/baileys": "github:seiren-primrose/PL-Baileys",
     "dotenv": "^16.4.7",
     "fs-extra": "^11.3.0",
     "node-fetch": "^2.6.1",
