@@ -10,20 +10,9 @@ const fs = require("fs-extra");
 const { Boom } = require("@hapi/boom");
 
 const MESSAGE = process.env.MESSAGE || `
-*SESSION GENERATED SUCCESSFULY* ✅
+*Session id generated for EF-PRIME-MD V2*
 
-*Gɪᴠᴇ ᴀ ꜱᴛᴀʀ ᴛᴏ ʀᴇᴘᴏ ꜰᴏʀ ᴄᴏᴜʀᴀɢᴇ* 🌟
-https://github.com/GuhailTechInfo/MEGA-AI
-
-*Sᴜᴘᴘᴏʀᴛ Gʀᴏᴜᴘ ꜰᴏʀ ϙᴜᴇʀʏ* 💭
-https://t.me/Global_TechInfo
-https://whatsapp.com/channel/0029VagJIAr3bbVBCpEkAM07
-
-*Yᴏᴜ-ᴛᴜʙᴇ ᴛᴜᴛᴏʀɪᴀʟꜱ* 🪄 
-https://youtube.com/GlobalTechInfo
-
-*MEGA-AI--WHATSAPP* 🥀
-`;
+> Thank you for choosing EF-PRIME-MD V2`;
 
 if (fs.existsSync('./auth_info_baileys')) {
   fs.emptyDirSync(__dirname + '/auth_info_baileys');
