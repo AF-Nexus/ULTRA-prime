@@ -1,0 +1,487 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <link rel="shortcut icon" type="x-icon" href="https://files.catbox.moe/oifwcm.jpg">
+  <meta http-equiv="X-UA-Compatible" content="IE=edge">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>EF-PRIME-MD | Connection Portal</title>
+  <meta property="og:image" content="https://files.catbox.moe/oifwcm.jpg">
+  <meta property="og:title" content="EF-PRIME-MD connection methods">
+  <style>
+    @import url('https://fonts.googleapis.com/css2?family=Rajdhani:wght@300;400;500;600;700&display=swap');
+    @import url('https://fonts.googleapis.com/css2?family=Orbitron:wght@400;500;600;700;800;900&display=swap');
+    
+    :root {
+      --primary: #0cffe1;
+      --secondary: #00a6ff;
+      --accent: #ff00b3;
+      --dark: #0a0a14;
+      --darker: #050508;
+      --text: #e0e0ff;
+    }
+    
+    * {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+    }
+    
+    body {
+      background: var(--darker);
+      font-family: 'Rajdhani', sans-serif;
+      color: var(--text);
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+      justify-content: center;
+      align-items: center;
+      position: relative;
+      overflow-x: hidden;
+    }
+    
+    .background {
+      position: fixed;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      z-index: -1;
+      background: linear-gradient(125deg, rgba(10,10,20,0.9) 0%, rgba(5,5,8,0.95) 100%);
+    }
+    
+    .grid {
+      position: fixed;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      background-image: 
+        linear-gradient(rgba(12, 255, 225, 0.05) 1px, transparent 1px),
+        linear-gradient(90deg, rgba(12, 255, 225, 0.05) 1px, transparent 1px);
+      background-size: 40px 40px;
+      z-index: -1;
+    }
+    
+    .container {
+      width: 90%;
+      max-width: 600px;
+      padding: 2rem;
+      background: rgba(10, 10, 20, 0.7);
+      backdrop-filter: blur(10px);
+      border-radius: 20px;
+      border: 1px solid rgba(12, 255, 225, 0.2);
+      box-shadow: 0 0 30px rgba(12, 255, 225, 0.1),
+                  0 0 80px rgba(0, 166, 255, 0.1);
+      margin: 2rem 0;
+      position: relative;
+      overflow: hidden;
+      z-index: 1;
+    }
+    
+    .glow {
+      position: absolute;
+      top: -50%;
+      left: -50%;
+      width: 200%;
+      height: 200%;
+      background: radial-gradient(
+        circle at center,
+        rgba(12, 255, 225, 0.1) 0%,
+        rgba(0, 166, 255, 0.05) 30%,
+        transparent 70%
+      );
+      z-index: -1;
+      pointer-events: none;
+    }
+    
+    .logo {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      margin-bottom: 2rem;
+    }
+    
+    .logo-icon {
+      width: 80px;
+      height: 80px;
+      background: linear-gradient(135deg, var(--primary), var(--secondary));
+      border-radius: 20px;
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      font-size: 2.5rem;
+      font-weight: 700;
+      color: var(--dark);
+      position: relative;
+      overflow: hidden;
+      margin-bottom: 1.5rem;
+      box-shadow: 0 0 20px rgba(12, 255, 225, 0.3);
+    }
+    
+    .logo-icon::before {
+      content: "";
+      position: absolute;
+      top: -50%;
+      left: -50%;
+      width: 200%;
+      height: 200%;
+      background: linear-gradient(
+        to bottom right,
+        rgba(255, 255, 255, 0.2),
+        rgba(255, 255, 255, 0)
+      );
+      transform: rotate(45deg);
+      animation: shine 6s infinite;
+    }
+    
+    @keyframes shine {
+      0% {
+        top: -50%;
+        left: -50%;
+      }
+      25% {
+        top: -30%;
+        left: 150%;
+      }
+      100% {
+        top: -50%;
+        left: -50%;
+      }
+    }
+    
+    .title {
+      font-family: 'Orbitron', sans-serif;
+      text-align: center;
+      position: relative;
+      margin-bottom: 0.5rem;
+    }
+    
+    h1 {
+      font-size: 2.5rem;
+      font-weight: 700;
+      letter-spacing: 2px;
+      background: linear-gradient(90deg, var(--primary), var(--secondary), var(--accent));
+      -webkit-background-clip: text;
+      background-clip: text;
+      color: transparent;
+      text-transform: uppercase;
+      margin-bottom: 0.5rem;
+      position: relative;
+    }
+    
+    h1::after {
+      content: "EF-PRIME-MD";
+      position: absolute;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      background: linear-gradient(90deg, var(--primary), var(--secondary));
+      -webkit-background-clip: text;
+      background-clip: text;
+      color: transparent;
+      filter: blur(10px);
+      opacity: 0.5;
+      z-index: -1;
+    }
+    
+    .subtitle {
+      font-size: 1.1rem;
+      font-weight: 300;
+      opacity: 0.8;
+      margin-bottom: 2rem;
+      text-align: center;
+    }
+    
+    .buttons-container {
+      display: flex;
+      flex-direction: column;
+      gap: 1.5rem;
+      width: 100%;
+    }
+    
+    .button {
+      position: relative;
+      background: linear-gradient(135deg, rgba(10, 10, 20, 0.8), rgba(5, 5, 8, 0.9));
+      color: var(--text);
+      font-family: 'Rajdhani', sans-serif;
+      font-size: 1.1rem;
+      font-weight: 600;
+      padding: 0.8rem 1.5rem;
+      border: none;
+      border-radius: 10px;
+      cursor: pointer;
+      transition: all 0.3s ease;
+      overflow: hidden;
+      text-transform: uppercase;
+      letter-spacing: 1px;
+      width: 100%;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 10px;
+      box-shadow: 0 0 10px rgba(0, 0, 0, 0.5);
+    }
+    
+    .button::before {
+      content: "";
+      position: absolute;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      background: linear-gradient(90deg, 
+                  transparent, 
+                  transparent,
+                  rgba(12, 255, 225, 0.1),
+                  rgba(12, 255, 225, 0.4),
+                  rgba(12, 255, 225, 0.1),
+                  transparent,
+                  transparent);
+      transform: translateX(-100%);
+      transition: all 0.6s ease;
+    }
+    
+    .button:hover {
+      background: linear-gradient(135deg, rgba(15, 15, 30, 0.8), rgba(10, 10, 16, 0.9));
+      box-shadow: 0 0 15px var(--primary), 0 0 30px rgba(12, 255, 225, 0.2);
+      transform: translateY(-2px);
+    }
+    
+    .button:hover::before {
+      transform: translateX(100%);
+    }
+    
+    .button-border {
+      position: absolute;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      border-radius: 10px;
+      overflow: hidden;
+      z-index: -1;
+    }
+    
+    .button-border::before {
+      content: '';
+      position: absolute;
+      top: 0;
+      left: 0;
+      width: 200%;
+      height: 200%;
+      background: linear-gradient(
+        to right,
+        var(--primary),
+        var(--secondary),
+        var(--accent),
+        var(--primary)
+      );
+      background-size: 50% 100%;
+      animation: borderAnimation 4s linear infinite;
+    }
+    
+    @keyframes borderAnimation {
+      0% {
+        transform: translateX(0) rotate(0deg);
+      }
+      100% {
+        transform: translateX(-50%) rotate(0deg);
+      }
+    }
+    
+    .button-icon {
+      font-size: 1.2rem;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      width: 24px;
+      height: 24px;
+    }
+    
+    .footer {
+      margin-top: 2rem;
+      padding: 1rem;
+      text-align: center;
+      font-size: 0.9rem;
+      opacity: 0.7;
+      width: 100%;
+    }
+    
+    .pulse {
+      animation: pulse 2s infinite;
+    }
+    
+    @keyframes pulse {
+      0% {
+        box-shadow: 0 0 0 0 rgba(12, 255, 225, 0.4);
+      }
+      70% {
+        box-shadow: 0 0 0 15px rgba(12, 255, 225, 0);
+      }
+      100% {
+        box-shadow: 0 0 0 0 rgba(12, 255, 225, 0);
+      }
+    }
+    
+    /* Decorative elements */
+    .corner {
+      position: absolute;
+      width: 20px;
+      height: 20px;
+      border-color: var(--primary);
+      opacity: 0.8;
+    }
+    
+    .corner-top-left {
+      top: 10px;
+      left: 10px;
+      border-top: 2px solid;
+      border-left: 2px solid;
+    }
+    
+    .corner-top-right {
+      top: 10px;
+      right: 10px;
+      border-top: 2px solid;
+      border-right: 2px solid;
+    }
+    
+    .corner-bottom-left {
+      bottom: 10px;
+      left: 10px;
+      border-bottom: 2px solid;
+      border-left: 2px solid;
+    }
+    
+    .corner-bottom-right {
+      bottom: 10px;
+      right: 10px;
+      border-bottom: 2px solid;
+      border-right: 2px solid;
+    }
+    
+    /* Animated connection dots */
+    .connection-dots {
+      position: absolute;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      pointer-events: none;
+      z-index: -1;
+    }
+    
+    .dot {
+      position: absolute;
+      width: 4px;
+      height: 4px;
+      background: var(--primary);
+      border-radius: 50%;
+      opacity: 0.5;
+      filter: blur(1px);
+      animation: float 8s infinite alternate;
+    }
+    
+    .dot:nth-child(1) {
+      top: 20%;
+      left: 10%;
+      animation-delay: 0s;
+    }
+    
+    .dot:nth-child(2) {
+      top: 70%;
+      left: 20%;
+      animation-delay: 1s;
+    }
+    
+    .dot:nth-child(3) {
+      top: 30%;
+      left: 80%;
+      animation-delay: 2s;
+    }
+    
+    .dot:nth-child(4) {
+      top: 60%;
+      left: 90%;
+      animation-delay: 3s;
+    }
+    
+    .dot:nth-child(5) {
+      top: 10%;
+      left: 50%;
+      animation-delay: 4s;
+    }
+    
+    .dot:nth-child(6) {
+      top: 80%;
+      left: 60%;
+      animation-delay: 5s;
+    }
+    
+    @keyframes float {
+      0% {
+        transform: translate(0, 0);
+      }
+      100% {
+        transform: translate(20px, 20px);
+      }
+    }
+  </style>
+</head>
+<body>
+  <div class="background"></div>
+  <div class="grid"></div>
+  
+  <div class="container">
+    <div class="glow"></div>
+    <div class="corner corner-top-left"></div>
+    <div class="corner corner-top-right"></div>
+    <div class="corner corner-bottom-left"></div>
+    <div class="corner corner-bottom-right"></div>
+    
+    <div class="connection-dots">
+      <div class="dot"></div>
+      <div class="dot"></div>
+      <div class="dot"></div>
+      <div class="dot"></div>
+      <div class="dot"></div>
+      <div class="dot"></div>
+    </div>
+    
+    <div class="logo">
+      <div class="logo-icon pulse">EF</div>
+    </div>
+    
+    <div class="title">
+      <h1>EF-PRIME-MD</h1>
+    </div>
+    <div class="subtitle">EF-PRIME-MD PAIR SITE</div>
+    
+    <div class="buttons-container">
+      <button onclick="location.href='/qr'" class="button">
+        <div class="button-border"></div>
+        <span class="button-icon">⊛</span>
+        QR Connect
+      </button>
+      
+      <button onclick="location.href='/pair'" class="button">
+        <div class="button-border"></div>
+        <span class="button-icon">⊕</span>
+        Pair Device
+      </button>
+      
+      <button onclick="window.open('https://github.com/efkidgamerdev/')" class="button">
+        <div class="button-border"></div>
+        <span class="button-icon">⌘</span>
+        GitHub Repo
+      </button>
+    </div>
+  </div>
+  
+  <footer class="footer">
+    <p>© Frank Kaumba Dev | EF-PRIME-MD v1.0.2</p>
+  </footer>
+</body>
+</html>
