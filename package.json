@@ -1,44 +1,23 @@
 {
-  "name": "qasim",
-  "version": "0.0.1",
-  "type": "commonjs",
-  "description": "A multi-functional WhatsApp bot Pairing Web and QR Scanner.",
-  "main": "index.js",
-  "engines": {
-    "node": ">=20.0.0"
-  },
+  "name": "ef-prime-md-pairing-service",
+  "version": "1.0.0",
+  "description": "A web service to generate WhatsApp bot session IDs.",
+  "main": "server.js",
   "scripts": {
     "start-website": "node server.js",
-    "run": "pm2 start index.js --deep-monitoring --attach --name qasim",
-    "qasim": "pm2 start index.js --deep-monitoring --attach --name qasim",
-    "start": "pm2 start index.js --deep-monitoring --attach --name qasim",
-    "stop": "pm2 stop qasim",
-    "restart": "pm2 restart qasim",
-    "reload": "pm2 reload qasim",
-    "dev": "nodemon index.js"
+    "start-bot": "node index.js"
   },
-  "keywords": [
-    "baileysQr", "MdLogin", "MEGA-AI", "whatsapp-bot", "BotWhatsapp", "whatsapp-web", "whatsapp", "session", "pair-code", "express-pairing", "whatsappbot", "express-session", "whatsapp-api", "pairing", "baileys-md", "baileys-bot",
-    "whatsappLogin", "adiwajshing/baileys", "baileys-md-qr", "multi-device-qr", "whiskey sockets/baileys", "md-pair", "bot-pair", "baileysQrScanner", "botpairing", "WhatsAppPairing", "LinkDevice"
-  ],
-  "author": "GlobalTechInfo",
-  "license": "MIT",
+  "author": "frank dev",
+  "license": "ISC",
   "dependencies": {
-    "@hapi/boom": "^10.0.1",
     "@whiskeysockets/baileys": "latest",
-    "dotenv": "^16.4.7",
-    "fs-extra": "^11.3.0",
-    "node-fetch": "^2.6.1",
-    "pastebin-api": "^7.0.0",
-    "pino": "^8.1.0",
-    "phone": "3.1.30",
-    "body-parser": "^1.20.1",
-    "path": "^0.12.7",
-    "express": "^4.18.1",
-    "pm2": "^5.4.2",
-    "qrcode": "^1.5.3"
-  }
-}    "pm2": "^5.4.2",
-    "qrcode": "^1.5.3"
+    "axios": "^1.6.8",
+    "chalk": "^4.1.2",
+    "dotenv": "^16.4.5",
+    "express": "^4.19.2",
+    "pastebin-js": "^1.0.6",  
+    "pino": "^8.21.0",
+    "qrcode-terminal": "^0.12.0",
+    "socket.io": "^4.7.5"
   }
 }
