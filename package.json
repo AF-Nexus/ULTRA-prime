@@ -10,7 +10,7 @@
   "author": "frank dev",
   "license": "ISC",
   "dependencies": {
-    "@whiskeysockets/baileys": "latest",
+    "baileys": "latest",
     "axios": "^1.6.8",
     "chalk": "^4.1.2",
     "dotenv": "^16.4.5",
