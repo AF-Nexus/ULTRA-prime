@@ -5,36 +5,16 @@ let router = express.Router();
 const pino = require("pino");
 const { Boom } = require("@hapi/boom");
 const MESSAGE = process.env.MESSAGE || `
-🚀 *_EF-PRIME-MD-ULTRA Session_* 💻
+🚀 *_EF-PRIME-MD-ULTRA Session Activated_* 💻
 
-╭─❒ *⚡ SESSION INITIALIZED* ❒
-├⬡ 🆔 Session ID: Generated Successfully
-├⬡ 🔐 Status: Active & Secure
-├⬡ 👨‍💻 Developer: Frank Kaumba Dev
-├⬡ 🌟 Version: EF-PRIME-MD V2
-├⬡ 📱 Platform: WhatsApp Bot
+╭─❒ *🎉 SESSION INFO* ❒
+├⬡ 🆔 Session ID successfully generated!
+├⬡ 🤖 Bot: EF-PRIME-MD-ULTRA V2
+├⬡ 😎 Welcome to the next-gen experience!
 ╰────────────❒
 
-╭─❒ *🎯 SESSION DETAILS* ❒
-├⬡ ✅ Connection: Established
-├⬡ 🛡️ Security: Encrypted
-├⬡ ⚡ Performance: Optimized
-├⬡ 🔄 Updates: Real-time
-├⬡ 🚀 Mode: Ultra Performance
-╰────────────❒
-
-╭─❒ *🌐 SYSTEM STATUS* ❒
-├⬡ 💚 Bot Status: Online
-├⬡ 🔧 Commands: Ready
-├⬡ 🎮 Features: Loaded
-├⬡ 🔒 Privacy: Protected
-├⬡ ⏱️ Uptime: Active
-╰────────────❒
-
-*EF-PRIME-MD-ULTRA* - Session Ready 😎
-> Thank you for choosing EF-PRIME-MD ULTRA 
-
-*Powered by Frank Kaumba Dev* 🌟`;
+> ✅ Thank you for choosing *EF-PRIME-MD V2*!
+> 🔒 Your session is now active and secured`;
 
 const uploadToPastebin = require('./Paste');  // Assuming you have a function to upload to Pastebin
 const {
