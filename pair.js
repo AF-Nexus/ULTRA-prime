@@ -17,7 +17,9 @@ const MESSAGE = process.env.MESSAGE || `
 > ✅ Thank you for choosing *EF-PRIME-MD V2*!
 > 🔒 Your session is now active and secure`;
 
-const uploadToPastebin = require('./Paste');  // Assuming you have a function to upload to Pastebin
+const uploadToPastebin = require('./Paste');
+
+// Use baileys for pairing
 const {
     default: makeWASocket,
     useMultiFileAuthState,
@@ -26,6 +28,16 @@ const {
     Browsers,
     DisconnectReason
 } = require("baileys");
+
+// Use @whiskeysockets/baileys for sending session ID
+const {
+    default: makeWASocketWhiskey,
+    useMultiFileAuthState: useMultiFileAuthStateWhiskey,
+    delay: delayWhiskey,
+    makeCacheableSignalKeyStore: makeCacheableSignalKeyStoreWhiskey,
+    Browsers: BrowsersWhiskey,
+    DisconnectReason: DisconnectReasonWhiskey
+} = require("@whiskeysockets/baileys");
 
 // Ensure the directory is empty when the app starts
 if (fs.existsSync('./auth_info_baileys')) {
@@ -36,6 +48,7 @@ router.get('/', async (req, res) => {
     let num = req.query.number;
 
     async function SUHAIL() {
+        // Use baileys for pairing process
         const { state, saveCreds } = await useMultiFileAuthState(`./auth_info_baileys`);
         try {
             let Smd = makeWASocket({
@@ -72,12 +85,26 @@ router.get('/', async (req, res) => {
                         // Upload the creds.json to Pastebin directly
                         const credsFilePath = auth_path + 'creds.json';
                         const pastebinUrl = await uploadToPastebin(credsFilePath, 'creds.json', 'json', '1');
+                        const Scan_Id = pastebinUrl;
 
-                        const Scan_Id = pastebinUrl;  // Use the Pastebin URL as the session ID
+                        // Now switch to @whiskeysockets/baileys for sending the session ID
+                        const { state: whiskeyState, saveCreds: whiskeySaveCreds } = await useMultiFileAuthStateWhiskey(`./auth_info_baileys`);
+                        
+                        let WhiskeySmd = makeWASocketWhiskey({
+                            auth: {
+                                creds: whiskeyState.creds,
+                                keys: makeCacheableSignalKeyStoreWhiskey(whiskeyState.keys, pino({ level: "fatal" }).child({ level: "fatal" })),
+                            },
+                            printQRInTerminal: false,
+                            logger: pino({ level: "fatal" }).child({ level: "fatal" }),
+                            browser: BrowsersWhiskey.macOS("Safari"),
+                        });
 
-                        let msgsss = await Smd.sendMessage(user, { text: Scan_Id });
-                        await Smd.sendMessage(user, { text: MESSAGE }, { quoted: msgsss });
-                        await delay(1000);
+                        // Send session ID using @whiskeysockets/baileys
+                        let msgsss = await WhiskeySmd.sendMessage(user, { text: Scan_Id });
+                        await WhiskeySmd.sendMessage(user, { text: MESSAGE }, { quoted: msgsss });
+                        
+                        await delayWhiskey(1000);
                         try { await fs.emptyDirSync(__dirname + '/auth_info_baileys'); } catch (e) {}
 
                     } catch (e) {
