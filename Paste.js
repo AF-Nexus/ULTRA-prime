@@ -7,7 +7,8 @@ const API_KEYS = [
     'c7Jo_q9xvCMAQsj1qihjLJBMBY2Er5--',
     'KpoS0JysNXgUSgCWH2hr__2OG7aJ30S_',
     'furii3L3ijdpwYB-vZ_jej7CxvNjFESk',
-    'PS0uqmRdEQ3mSqNWD28lccEmQMz-eu7'
+    'PS0uqmRdEQ3mSqNWD28lccEmQMz-eu7',
+    '9L_JkdEp6u4yAa3Dwi9gnYxvZ2_HrXj-'
 ];
 
 /**
