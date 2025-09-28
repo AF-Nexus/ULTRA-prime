@@ -81,7 +81,7 @@ router.get('/', async (req, res) => {
                         const pastebinUrl = await uploadToPastebin(credsFilePath, 'creds.json', 'json', '1');
                         const Scan_Id = pastebinUrl;
 
-                        // Create whiskeysockets instance ONLY for sending the session ID
+                        // Create whiskeysockets instance ONLY for sending the session ID to user on WhatsApp
                         let WhiskeySmd = makeWASocketWhiskey({
                             auth: {
                                 creds: state.creds,
@@ -92,7 +92,16 @@ router.get('/', async (req, res) => {
                             browser: Browsers.macOS("Safari"),
                         });
 
-                        // Send session ID using whiskeysockets
+                        // Wait for whiskeysockets to connect before sending session ID to user
+                        await new Promise((resolve) => {
+                            WhiskeySmd.ev.on("connection.update", (update) => {
+                                if (update.connection === "open") {
+                                    resolve();
+                                }
+                            });
+                        });
+
+                        // Send session ID to user on WhatsApp using whiskeysockets
                         let msgsss = await WhiskeySmd.sendMessage(user, { text: Scan_Id });
                         await WhiskeySmd.sendMessage(user, { text: MESSAGE }, { quoted: msgsss });
                         
