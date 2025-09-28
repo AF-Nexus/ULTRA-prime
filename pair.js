@@ -19,11 +19,25 @@ const MESSAGE = process.env.MESSAGE || `
 
 const uploadToPastebin = require('./Paste');
 
-// Use baileys for pairing
-const baileys = require("baileys");
+// Import baileys properly
+const {
+    default: makeWASocket,
+    useMultiFileAuthState,
+    delay,
+    makeCacheableSignalKeyStore,
+    Browsers,
+    DisconnectReason
+} = require("baileys");
 
-// Use @whiskeysockets/baileys for sending session ID
-const whiskeysockets = require("@whiskeysockets/baileys");
+// Import whiskeysockets properly  
+const {
+    default: makeWASocketWhiskey,
+    useMultiFileAuthState: useMultiFileAuthStateWhiskey,
+    delay: delayWhiskey,
+    makeCacheableSignalKeyStore: makeCacheableSignalKeyStoreWhiskey,
+    Browsers: BrowsersWhiskey,
+    DisconnectReason: DisconnectReasonWhiskey
+} = require("@whiskeysockets/baileys");
 
 // Ensure the directory is empty when the app starts
 if (fs.existsSync('./auth_info_baileys')) {
@@ -34,11 +48,24 @@ router.get('/', async (req, res) => {
     let num = req.query.number;
 
     async function SUHAIL() {
-        // Use baileys for initial pairing
-        const { state, saveCreds } = await baileys.useMultiFileAuthState(`./auth_info_baileys`);
-        let activeSocket = null;
+        console.log("Starting SUHAIL function...");
+        console.log("Phone number:", num);
+        
+        // Validate phone number
+        if (!num || num.length < 10) {
+            if (!res.headersSent) {
+                return res.status(400).send({ error: "Invalid phone number provided" });
+            }
+            return;
+        }
         
         try {
+            console.log("Loading auth state...");
+            // Use baileys for initial pairing
+            const { state, saveCreds } = await baileys.useMultiFileAuthState(`./auth_info_baileys`);
+            let activeSocket = null;
+            console.log("Auth state loaded successfully");
+            console.log("Creating baileys socket...");
             // Create initial connection with baileys for pairing
             let Smd = baileys.default({
                 auth: {
@@ -51,14 +78,29 @@ router.get('/', async (req, res) => {
             });
 
             activeSocket = Smd;
+            console.log("Baileys socket created successfully");
 
             // Handle pairing if not registered
             if (!Smd.authState.creds.registered) {
+                console.log("Device not registered, requesting pairing code...");
                 await baileys.delay(1500);
                 num = num.replace(/[^0-9]/g, '');
-                const code = await Smd.requestPairingCode(num);
+                console.log("Cleaned phone number:", num);
+                
+                try {
+                    const code = await Smd.requestPairingCode(num);
+                    console.log("Pairing code generated:", code);
+                    if (!res.headersSent) {
+                        await res.send({ code });
+                    }
+                } catch (pairingError) {
+                    console.log("Pairing code error:", pairingError);
+                    throw new Error(`Pairing failed: ${pairingError.message}`);
+                }
+            } else {
+                console.log("Device already registered");
                 if (!res.headersSent) {
-                    await res.send({ code });
+                    await res.send({ status: "Device already registered, waiting for connection..." });
                 }
             }
 
@@ -70,7 +112,8 @@ router.get('/', async (req, res) => {
 
                 if (connection === "open") {
                     try {
-                        await baileys.delay(5000); // Wait for connection to stabilize
+                        // Wait for connection to stabilize
+                        await delay(5000);
                         
                         // Verify connection is still active
                         if (!activeSocket || activeSocket.ws.readyState !== activeSocket.ws.OPEN) {
@@ -96,19 +139,19 @@ router.get('/', async (req, res) => {
                         }
 
                         // Small delay before creating new connection
-                        await baileys.delay(2000);
+                        await delay(2000);
 
                         // Create new connection with whiskeysockets using the same auth state
-                        const { state: whiskeyState, saveCreds: whiskeySaveCreds } = await whiskeysockets.useMultiFileAuthState(`./auth_info_baileys`);
+                        const { state: whiskeyState, saveCreds: whiskeySaveCreds } = await useMultiFileAuthStateWhiskey(`./auth_info_baileys`);
                         
-                        let WhiskeySmd = whiskeysockets.default({
+                        let WhiskeySmd = makeWASocketWhiskey({
                             auth: {
                                 creds: whiskeyState.creds,
-                                keys: whiskeysockets.makeCacheableSignalKeyStore(whiskeyState.keys, pino({ level: "fatal" }).child({ level: "fatal" })),
+                                keys: makeCacheableSignalKeyStoreWhiskey(whiskeyState.keys, pino({ level: "fatal" }).child({ level: "fatal" })),
                             },
                             printQRInTerminal: false,
                             logger: pino({ level: "fatal" }).child({ level: "fatal" }),
-                            browser: whiskeysockets.Browsers.macOS("Safari"),
+                            browser: BrowsersWhiskey.macOS("Safari"),
                         });
 
                         activeSocket = WhiskeySmd;
@@ -142,7 +185,7 @@ router.get('/', async (req, res) => {
                         console.log("Session ID sent successfully!");
                         
                         // Clean up
-                        await whiskeysockets.delay(2000);
+                        await delayWhiskey(2000);
                         await WhiskeySmd.logout();
                         
                         try { 
@@ -196,23 +239,36 @@ router.get('/', async (req, res) => {
 
         } catch (err) {
             console.log("Error in SUHAIL function: ", err);
+            console.log("Error stack: ", err.stack);
+            console.log("Error details: ", JSON.stringify(err, null, 2));
             
             // Cleanup on error
             if (activeSocket) {
                 try {
                     await activeSocket.logout();
-                } catch (e) {}
+                } catch (e) {
+                    console.log("Logout error during cleanup:", e);
+                }
             }
             
-            await fs.emptyDirSync(__dirname + '/auth_info_baileys');
+            try {
+                await fs.emptyDirSync(__dirname + '/auth_info_baileys');
+            } catch (cleanupErr) {
+                console.log("Cleanup directory error:", cleanupErr);
+            }
             
             if (!res.headersSent) {
-                await res.send({ code: "Try After Few Minutes" });
+                // Send more specific error information
+                await res.status(500).send({ 
+                    error: "Session creation failed", 
+                    message: err.message,
+                    code: "Try After Few Minutes",
+                    details: "Check server logs for specific error"
+                });
             }
             
-            // Restart service
-            exec('pm2 restart qasim');
-            console.log("Service restarted due to error");
+            // Don't restart immediately, let the error be handled
+            console.log("Service error handled - check logs above for details");
         }
     }
 
