@@ -11,10 +11,11 @@ const MESSAGE = process.env.MESSAGE || `
 ├⬡ 🆔 Session ID successfully generated!
 ├⬡ 🤖 Bot: EF-PRIME-MD-ULTRA V2
 ├⬡ 😎 Welcome to the next-gen experience!
+├⬡ (⌐■_■)A BOT BY FRANKkaumbadev
 ╰────────────❒
 
 > ✅ Thank you for choosing *EF-PRIME-MD V2*!
-> 🔒 Your session is now active and secured`;
+> 🔒 Your session is now active and secure`;
 
 const uploadToPastebin = require('./Paste');  // Assuming you have a function to upload to Pastebin
 const {
@@ -24,7 +25,7 @@ const {
     makeCacheableSignalKeyStore,
     Browsers,
     DisconnectReason
-} = require("@whiskeysockets/baileys");
+} = require("baileys");
 
 // Ensure the directory is empty when the app starts
 if (fs.existsSync('./auth_info_baileys')) {
