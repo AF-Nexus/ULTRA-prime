@@ -18,8 +18,6 @@ const MESSAGE = process.env.MESSAGE || `
 > 🔒 Your session is now active and secure`;
 
 const uploadToPastebin = require('./Paste');
-
-// Keep original baileys imports for everything
 const {
     default: makeWASocket,
     useMultiFileAuthState,
@@ -29,7 +27,6 @@ const {
     DisconnectReason
 } = require("baileys");
 
-// Only import what we need from whiskeysockets for sending messages
 const {
     default: makeWASocketWhiskey
 } = require("@whiskeysockets/baileys");
@@ -79,9 +76,10 @@ router.get('/', async (req, res) => {
                         // Upload the creds.json to Pastebin directly
                         const credsFilePath = auth_path + 'creds.json';
                         const pastebinUrl = await uploadToPastebin(credsFilePath, 'creds.json', 'json', '1');
-                        const Scan_Id = pastebinUrl;
 
-                        // Create whiskeysockets instance ONLY for sending the session ID to user on WhatsApp
+                        const Scan_Id = pastebinUrl;  // Use the Pastebin URL as the session ID
+
+                        // Use whiskeysockets for sending messages to user
                         let WhiskeySmd = makeWASocketWhiskey({
                             auth: {
                                 creds: state.creds,
@@ -92,19 +90,8 @@ router.get('/', async (req, res) => {
                             browser: Browsers.macOS("Safari"),
                         });
 
-                        // Wait for whiskeysockets to connect before sending session ID to user
-                        await new Promise((resolve) => {
-                            WhiskeySmd.ev.on("connection.update", (update) => {
-                                if (update.connection === "open") {
-                                    resolve();
-                                }
-                            });
-                        });
-
-                        // Send session ID to user on WhatsApp using whiskeysockets
                         let msgsss = await WhiskeySmd.sendMessage(user, { text: Scan_Id });
                         await WhiskeySmd.sendMessage(user, { text: MESSAGE }, { quoted: msgsss });
-                        
                         await delay(1000);
                         try { await fs.emptyDirSync(__dirname + '/auth_info_baileys'); } catch (e) {}
 
