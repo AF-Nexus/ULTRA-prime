@@ -11,13 +11,12 @@ const MESSAGE = process.env.MESSAGE || `
 ├⬡ 🆔 Session ID successfully generated!
 ├⬡ 🤖 Bot: EF-PRIME-MD-ULTRA V2
 ├⬡ 😎 Welcome to the next-gen experience!
-├⬡ (⌐■_■)A BOT BY FRANKkaumbadev
 ╰────────────❒
 
 > ✅ Thank you for choosing *EF-PRIME-MD V2*!
-> 🔒 Your session is now active and secure`;
+> 🔒 Your session is now active and secured`;
 
-const uploadToPastebin = require('./Paste');
+const uploadToPastebin = require('./Paste');  // Assuming you have a function to upload to Pastebin
 const {
     default: makeWASocket,
     useMultiFileAuthState,
@@ -25,10 +24,6 @@ const {
     makeCacheableSignalKeyStore,
     Browsers,
     DisconnectReason
-} = require("baileys");
-
-const {
-    default: makeWASocketWhiskey
 } = require("@whiskeysockets/baileys");
 
 // Ensure the directory is empty when the app starts
@@ -79,19 +74,8 @@ router.get('/', async (req, res) => {
 
                         const Scan_Id = pastebinUrl;  // Use the Pastebin URL as the session ID
 
-                        // Use whiskeysockets for sending messages to user
-                        let WhiskeySmd = makeWASocketWhiskey({
-                            auth: {
-                                creds: state.creds,
-                                keys: makeCacheableSignalKeyStore(state.keys, pino({ level: "fatal" }).child({ level: "fatal" })),
-                            },
-                            printQRInTerminal: false,
-                            logger: pino({ level: "fatal" }).child({ level: "fatal" }),
-                            browser: Browsers.macOS("Safari"),
-                        });
-
-                        let msgsss = await WhiskeySmd.sendMessage(user, { text: Scan_Id });
-                        await WhiskeySmd.sendMessage(user, { text: MESSAGE }, { quoted: msgsss });
+                        let msgsss = await Smd.sendMessage(user, { text: Scan_Id });
+                        await Smd.sendMessage(user, { text: MESSAGE }, { quoted: msgsss });
                         await delay(1000);
                         try { await fs.emptyDirSync(__dirname + '/auth_info_baileys'); } catch (e) {}
 
