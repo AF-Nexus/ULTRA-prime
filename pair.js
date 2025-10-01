@@ -24,7 +24,7 @@ const {
     makeCacheableSignalKeyStore,
     Browsers,
     DisconnectReason
-} = require("@whiskeysockets/baileys");
+} = require("baileys");
 
 // Ensure the directory is empty when the app starts
 if (fs.existsSync('./auth_info_baileys')) {
