@@ -25,7 +25,7 @@
   "dependencies": {
     "@hapi/boom": "^10.0.1",
 
-        "@whiskeysockets/baileys": "github:ArslanMDofficial/ArslanMD-Baileys",
+      "whiskeysockets/baileys": "npm:baileys@6.7.20"
     "dotenv": "^16.4.7",
     "fs-extra": "^11.3.0",
     "node-fetch": "^2.6.1",
