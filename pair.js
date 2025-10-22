@@ -44,88 +44,173 @@ router.get('/', async (req, res) => {
 
     let num = req.query.number;
 
+    if (!num) {
+        return res.status(400).json({ error: "Please provide a phone number using ?number=YOUR_NUMBER" });
+    }
+
+    // Clean the number
+    num = num.replace(/[^0-9]/g, '');
+
+    if (num.length < 10) {
+        return res.status(400).json({ error: "Invalid phone number. Please provide a valid number without spaces or special characters." });
+    }
+
     async function SUHAIL() {
-        const { state, saveCreds } = await useMultiFileAuthState(`./auth_info_baileys`);
+        const sessionDir = __dirname + '/auth_info_baileys/' + num;
+        
+        // Create unique session directory for this number
+        if (!fs.existsSync(sessionDir)) {
+            fs.mkdirSync(sessionDir, { recursive: true });
+        }
+
+        const { state, saveCreds } = await useMultiFileAuthState(sessionDir);
+        
         try {
             let Smd = makeWASocket({
                 auth: {
                     creds: state.creds,
-                    keys: makeCacheableSignalKeyStore(state.keys, pino({ level: "fatal" }).child({ level: "fatal" })),
+                    keys: makeCacheableSignalKeyStore(state.keys, pino({ level: "silent" })),
                 },
                 printQRInTerminal: false,
-                logger: pino({ level: "fatal" }).child({ level: "fatal" }),
+                logger: pino({ level: "silent" }),
                 browser: Browsers.macOS("Safari"),
+                generateHighQualityLinkPreview: true,
             });
 
+            // Check if already registered
             if (!Smd.authState.creds.registered) {
-                await delay(1500);
-                num = num.replace(/[^0-9]/g, '');
-                const code = await Smd.requestPairingCode(num);
-                if (!res.headersSent) {
-                    await res.send({ code });
+                await delay(2000);
+                
+                try {
+                    // Request pairing code from WhatsApp
+                    const code = await Smd.requestPairingCode(num);
+                    console.log(`Pairing code for ${num}: ${code}`);
+                    
+                    if (!res.headersSent) {
+                        return res.json({ 
+                            success: true,
+                            code: code,
+                            message: "Enter this code in WhatsApp > Linked Devices > Link a Device",
+                            number: num
+                        });
+                    }
+                } catch (error) {
+                    console.error("Error requesting pairing code:", error);
+                    if (!res.headersSent) {
+                        return res.status(500).json({ 
+                            error: "Failed to generate pairing code. Please check the phone number and try again.",
+                            details: error.message 
+                        });
+                    }
                 }
             }
 
             Smd.ev.on('creds.update', saveCreds);
+            
             Smd.ev.on("connection.update", async (s) => {
                 const { connection, lastDisconnect } = s;
 
                 if (connection === "open") {
+                    console.log("Connection established for " + num);
+                    
                     try {
-                        await delay(10000);
-                        if (fs.existsSync('./auth_info_baileys/creds.json'));
+                        await delay(5000);
+                        
+                        const credsPath = sessionDir + '/creds.json';
+                        
+                        if (fs.existsSync(credsPath)) {
+                            let user = Smd.user.id;
 
-                        const auth_path = './auth_info_baileys/';
-                        let user = Smd.user.id;
+                            // Read and encode session file
+                            const credsData = await fs.readFile(credsPath, 'utf8');
+                            
+                            // Upload the creds.json to Pastebin
+                            const pastebinUrl = await uploadToPastebin(credsPath, `session_${num}`, 'json', '1');
 
-                        // Upload the creds.json to Pastebin directly
-                        const credsFilePath = auth_path + 'creds.json';
-                        const pastebinUrl = await uploadToPastebin(credsFilePath, 'creds.json', 'json', '1');
+                            const sessionId = pastebinUrl || credsData;
 
-                        const Scan_Id = pastebinUrl;  // Use the Pastebin URL as the session ID
+                            // Send session ID to user
+                            let msgResponse = await Smd.sendMessage(user, { 
+                                text: `*Session ID:*\n\n${sessionId}\n\n_Save this Session ID securely!_` 
+                            });
+                            
+                            await delay(1000);
+                            
+                            // Send welcome message
+                            await Smd.sendMessage(user, { text: MESSAGE }, { quoted: msgResponse });
+                            
+                            console.log("Session created successfully for " + num);
 
-                        let msgsss = await Smd.sendMessage(user, { text: Scan_Id });
-                        await Smd.sendMessage(user, { text: MESSAGE }, { quoted: msgsss });
-                        await delay(1000);
-                        try { await fs.emptyDirSync(__dirname + '/auth_info_baileys'); } catch (e) {}
+                            await delay(2000);
+                            
+                            // Cleanup
+                            try { 
+                                await fs.emptyDir(sessionDir);
+                                await fs.rmdir(sessionDir);
+                            } catch (e) {
+                                console.log("Cleanup error:", e);
+                            }
+
+                            // Close connection gracefully
+                            await Smd.logout();
+                            
+                        } else {
+                            console.log("Creds file not found!");
+                        }
 
                     } catch (e) {
-                        console.log("Error during file upload or message send: ", e);
+                        console.log("Error during session creation: ", e);
                     }
-
-                    await delay(100);
-                    await fs.emptyDirSync(__dirname + '/auth_info_baileys');
                 }
 
                 // Handle connection closures
                 if (connection === "close") {
                     let reason = new Boom(lastDisconnect?.error)?.output.statusCode;
-                    if (reason === DisconnectReason.connectionClosed) {
+                    
+                    console.log("Connection closed. Reason:", reason);
+                    
+                    if (reason === DisconnectReason.badSession) {
+                        console.log("Bad Session File, deleting...");
+                        try {
+                            await fs.emptyDir(sessionDir);
+                            await fs.rmdir(sessionDir);
+                        } catch (e) {}
+                    } else if (reason === DisconnectReason.connectionClosed) {
                         console.log("Connection closed!");
                     } else if (reason === DisconnectReason.connectionLost) {
                         console.log("Connection Lost from Server!");
+                    } else if (reason === DisconnectReason.loggedOut) {
+                        console.log("Device Logged Out!");
+                        try {
+                            await fs.emptyDir(sessionDir);
+                            await fs.rmdir(sessionDir);
+                        } catch (e) {}
                     } else if (reason === DisconnectReason.restartRequired) {
                         console.log("Restart Required, Restarting...");
                         SUHAIL().catch(err => console.log(err));
                     } else if (reason === DisconnectReason.timedOut) {
                         console.log("Connection TimedOut!");
                     } else {
-                        console.log('Connection closed with bot. Please run again.');
-                        console.log(reason);
-                        await delay(5000);
-                        exec('pm2 restart qasim');
+                        console.log('Connection closed. Reason:', reason);
                     }
                 }
             });
 
         } catch (err) {
             console.log("Error in SUHAIL function: ", err);
-            exec('pm2 restart qasim');
-            console.log("Service restarted due to error");
-            SUHAIL();
-            await fs.emptyDirSync(__dirname + '/auth_info_baileys');
+            
+            // Cleanup on error
+            try {
+                await fs.emptyDir(sessionDir);
+                await fs.rmdir(sessionDir);
+            } catch (e) {}
+            
             if (!res.headersSent) {
-                await res.send({ code: "Try After Few Minutes" });
+                return res.status(500).json({ 
+                    error: "Failed to create session",
+                    message: "Please try again after a few minutes",
+                    details: err.message 
+                });
             }
         }
     }
