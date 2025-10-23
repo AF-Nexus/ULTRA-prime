@@ -19,19 +19,14 @@ const MESSAGE = process.env.MESSAGE || `
 
 const uploadToPastebin = require('./Paste');
 
-// Dynamic import of Baileys (ES Module)
-let makeWASocket, useMultiFileAuthState, delay, makeCacheableSignalKeyStore, Browsers, DisconnectReason;
-
-// Load Baileys asynchronously
-const loadBaileys = (async () => {
-    const baileys = await import("@whiskeysockets/baileys");
-    makeWASocket = baileys.default;
-    useMultiFileAuthState = baileys.useMultiFileAuthState;
-    delay = baileys.delay;
-    makeCacheableSignalKeyStore = baileys.makeCacheableSignalKeyStore;
-    Browsers = baileys.Browsers;
-    DisconnectReason = baileys.DisconnectReason;
-})();
+const {
+    default: makeWASocket,
+    useMultiFileAuthState,
+    delay,
+    makeCacheableSignalKeyStore,
+    Browsers,
+    DisconnectReason
+} = require("@whiskeysockets/baileys");
 
 // Ensure the directory is empty when the app starts
 if (fs.existsSync('./auth_info_baileys')) {
@@ -39,17 +34,9 @@ if (fs.existsSync('./auth_info_baileys')) {
 }
 
 router.get('/', async (req, res) => {
-    // Wait for Baileys to load
-    await loadBaileys;
-
-    // Extract and sanitize number BEFORE passing to SUHAIL
     let num = req.query.number;
-    if (!num) {
-        return res.status(400).send({ error: "Number parameter is required" });
-    }
-    num = num.replace(/[^0-9]/g, '');
 
-    async function SUHAIL(phoneNumber) {
+    async function SUHAIL() {
         const { state, saveCreds } = await useMultiFileAuthState(`./auth_info_baileys`);
         
         try {
@@ -65,7 +52,8 @@ router.get('/', async (req, res) => {
 
             if (!Smd.authState.creds.registered) {
                 await delay(1500);
-                const code = await Smd.requestPairingCode(phoneNumber);
+                num = num.replace(/[^0-9]/g, '');
+                const code = await Smd.requestPairingCode(num);
                 if (!res.headersSent) {
                     await res.send({ code });
                 }
@@ -121,7 +109,7 @@ router.get('/', async (req, res) => {
                         console.log("Connection Lost from Server!");
                     } else if (reason === DisconnectReason.restartRequired) {
                         console.log("Restart Required, Restarting...");
-                        SUHAIL(phoneNumber).catch(err => console.log(err));
+                        SUHAIL().catch(err => console.log(err));
                     } else if (reason === DisconnectReason.timedOut) {
                         console.log("Connection TimedOut!");
                     } else {
@@ -144,7 +132,7 @@ router.get('/', async (req, res) => {
         }
     }
 
-    return await SUHAIL(num);
+    return await SUHAIL();
 });
 
 module.exports = router;
