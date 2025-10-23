@@ -19,14 +19,21 @@ const MESSAGE = process.env.MESSAGE || `
 
 const uploadToPastebin = require('./Paste');
 
-const {
-    default: makeWASocket,
-    useMultiFileAuthState,
-    delay,
-    makeCacheableSignalKeyStore,
-    Browsers,
-    DisconnectReason
-} = require("@whiskeysockets/baileys");
+// Dynamic import of Baileys (ES Module)
+let makeWASocket, useMultiFileAuthState, delay, makeCacheableSignalKeyStore, Browsers, DisconnectReason;
+
+// Load Baileys asynchronously
+const loadBaileys = async () => {
+    if (!makeWASocket) {
+        const baileys = await import("@whiskeysockets/baileys");
+        makeWASocket = baileys.default;
+        useMultiFileAuthState = baileys.useMultiFileAuthState;
+        delay = baileys.delay;
+        makeCacheableSignalKeyStore = baileys.makeCacheableSignalKeyStore;
+        Browsers = baileys.Browsers;
+        DisconnectReason = baileys.DisconnectReason;
+    }
+};
 
 // Ensure the directory is empty when the app starts
 if (fs.existsSync('./auth_info_baileys')) {
@@ -34,6 +41,9 @@ if (fs.existsSync('./auth_info_baileys')) {
 }
 
 router.get('/', async (req, res) => {
+    // Wait for Baileys to load
+    await loadBaileys();
+
     let num = req.query.number;
 
     async function SUHAIL() {
