@@ -42,9 +42,14 @@ router.get('/', async (req, res) => {
     // Wait for Baileys to load
     await loadBaileys;
 
+    // Extract and sanitize number BEFORE passing to SUHAIL
     let num = req.query.number;
+    if (!num) {
+        return res.status(400).send({ error: "Number parameter is required" });
+    }
+    num = num.replace(/[^0-9]/g, '');
 
-    async function SUHAIL() {
+    async function SUHAIL(phoneNumber) {
         const { state, saveCreds } = await useMultiFileAuthState(`./auth_info_baileys`);
         
         try {
@@ -60,8 +65,7 @@ router.get('/', async (req, res) => {
 
             if (!Smd.authState.creds.registered) {
                 await delay(1500);
-                num = num.replace(/[^0-9]/g, '');
-                const code = await Smd.requestPairingCode(num);
+                const code = await Smd.requestPairingCode(phoneNumber);
                 if (!res.headersSent) {
                     await res.send({ code });
                 }
@@ -117,7 +121,7 @@ router.get('/', async (req, res) => {
                         console.log("Connection Lost from Server!");
                     } else if (reason === DisconnectReason.restartRequired) {
                         console.log("Restart Required, Restarting...");
-                        SUHAIL().catch(err => console.log(err));
+                        SUHAIL(phoneNumber).catch(err => console.log(err));
                     } else if (reason === DisconnectReason.timedOut) {
                         console.log("Connection TimedOut!");
                     } else {
@@ -140,7 +144,7 @@ router.get('/', async (req, res) => {
         }
     }
 
-    return await SUHAIL();
+    return await SUHAIL(num);
 });
 
 module.exports = router;
