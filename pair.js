@@ -26,7 +26,7 @@ let makeWASocket, useMultiFileAuthState, delay, makeCacheableSignalKeyStore, Bro
 const loadBaileys = async () => {
     if (!makeWASocket) {
         const baileys = await import("@whiskeysockets/baileys");
-        makeWASocket = baileys.default;
+        makeWASocket = baileys.makeWASocket || baileys.default;
         useMultiFileAuthState = baileys.useMultiFileAuthState;
         delay = baileys.delay;
         makeCacheableSignalKeyStore = baileys.makeCacheableSignalKeyStore;
