@@ -76,20 +76,39 @@ router.get('/', async (req, res) => {
 
                 if (connection === "open") {
                     try {
-                        await delay(10000);
+                        console.log("Connection opened successfully!");
+                        await delay(5000);
                         
                         const auth_path = './auth_info_baileys/';
                         const credsFilePath = auth_path + 'creds.json';
                         
+                        console.log("Checking for creds file:", credsFilePath);
+                        console.log("File exists:", fs.existsSync(credsFilePath));
+                        
                         if (fs.existsSync(credsFilePath)) {
                             let user = Smd.user.id;
+                            console.log("User ID:", user);
+                            
+                            // Format user ID properly for sending message
+                            let userId = user;
+                            if (!userId.includes('@')) {
+                                userId = userId.split(':')[0] + '@s.whatsapp.net';
+                            }
+                            console.log("Formatted User ID:", userId);
 
                             // Upload the creds.json to Pastebin directly
+                            console.log("Uploading to Pastebin...");
                             const pastebinUrl = await uploadToPastebin(credsFilePath, 'creds.json', 'json', '1');
+                            console.log("Pastebin URL:", pastebinUrl);
+                            
                             const Scan_Id = pastebinUrl;
 
-                            let msgsss = await Smd.sendMessage(user, { text: Scan_Id });
-                            await Smd.sendMessage(user, { text: MESSAGE }, { quoted: msgsss });
+                            console.log("Sending session ID message...");
+                            let msgsss = await Smd.sendMessage(userId, { text: Scan_Id });
+                            console.log("Sending welcome message...");
+                            await Smd.sendMessage(userId, { text: MESSAGE }, { quoted: msgsss });
+                            console.log("Messages sent successfully!");
+                            
                             await delay(1000);
                             
                             try { 
@@ -97,6 +116,8 @@ router.get('/', async (req, res) => {
                             } catch (e) {
                                 console.log("Cleanup error:", e);
                             }
+                        } else {
+                            console.log("Creds file not found!");
                         }
 
                     } catch (e) {
