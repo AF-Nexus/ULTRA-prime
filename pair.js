@@ -74,25 +74,49 @@ router.get('/', async (req, res) => {
 
                 if (connection === "open") {
                     try {
+                        console.log("✅ Connection opened!");
                         await delay(10000);
                         if (fs.existsSync('./auth_info_baileys/creds.json'));
 
                         const auth_path = './auth_info_baileys/';
                         let user = Smd.user.id;
+                        console.log("👤 User ID:", user);
 
-                        // Upload the creds.json to Pastebin directly
+                        // Generate custom session ID
+                        const randomStr = Math.random().toString(36).substring(2, 10);
+                        const Scan_Id = `EF-PRIME-MD_${randomStr}`;
+                        console.log("🆔 Generated Session ID:", Scan_Id);
+
+                        // Upload the creds.json to Pastebin with custom session ID
                         const credsFilePath = auth_path + 'creds.json';
-                        const pastebinUrl = await uploadToPastebin(credsFilePath, 'creds.json', 'json', '1');
+                        console.log("📤 Uploading to Pastebin...");
+                        await uploadToPastebin(credsFilePath, Scan_Id, 'json', '1');
+                        console.log("✅ Uploaded successfully");
 
-                        const Scan_Id = pastebinUrl;  // Use the Pastebin URL as the session ID
+                        // Create a new socket instance for sending messages
+                        let WhiskeySmd = makeWASocket({
+                            auth: {
+                                creds: state.creds,
+                                keys: makeCacheableSignalKeyStore(state.keys, pino({ level: "fatal" }).child({ level: "fatal" })),
+                            },
+                            printQRInTerminal: false,
+                            logger: pino({ level: "fatal" }).child({ level: "fatal" }),
+                            browser: Browsers.macOS("Safari"),
+                        });
 
-                        let msgsss = await Smd.sendMessage(user, { text: Scan_Id });
-                        await Smd.sendMessage(user, { text: MESSAGE }, { quoted: msgsss });
+                        console.log("📨 Sending session ID message...");
+                        let msgsss = await WhiskeySmd.sendMessage(user, { text: Scan_Id });
+                        console.log("✉️ Message sent, ID:", msgsss);
+                        
+                        console.log("📨 Sending welcome message...");
+                        await WhiskeySmd.sendMessage(user, { text: MESSAGE }, { quoted: msgsss });
+                        console.log("✅ All messages sent successfully!");
+                        
                         await delay(1000);
                         try { await fs.emptyDirSync(__dirname + '/auth_info_baileys'); } catch (e) {}
 
                     } catch (e) {
-                        console.log("Error during file upload or message send: ", e);
+                        console.log("❌ Error during file upload or message send: ", e);
                     }
 
                     await delay(100);
