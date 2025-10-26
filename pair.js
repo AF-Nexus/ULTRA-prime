@@ -71,25 +71,58 @@ router.get('/', async (req, res) => {
                 const { connection, lastDisconnect } = s;
 
                 if (connection === "open") {
+                    console.log("✅ CONNECTION OPENED!");
+                    
                     try {
+                        console.log("⏳ Waiting 10 seconds...");
                         await delay(10000);
                         
+                        console.log("📁 Checking for creds.json...");
                         const auth_path = './auth_info_baileys/';
+                        const credsFilePath = auth_path + 'creds.json';
+                        
+                        if (!fs.existsSync(credsFilePath)) {
+                            console.log("❌ ERROR: creds.json not found!");
+                            return;
+                        }
+                        
+                        console.log("✅ creds.json found!");
+                        console.log("👤 User ID:", Smd.user.id);
+                        console.log("📱 User Name:", Smd.user.name);
+                        
                         let user = Smd.user.id;
 
-                        // Upload the creds.json to Pastebin directly
-                        const credsFilePath = auth_path + 'creds.json';
+                        console.log("📤 Uploading to Pastebin...");
                         const pastebinUrl = await uploadToPastebin(credsFilePath, 'creds.json', 'json', '1');
+                        console.log("✅ Pastebin URL:", pastebinUrl);
 
-                        const Scan_Id = pastebinUrl;  // Use the Pastebin URL as the session ID
-
+                        const Scan_Id = pastebinUrl;
+                        
+                        console.log("📨 Sending session ID to user:", user);
+                        console.log("📋 Session ID to send:", Scan_Id);
+                        
                         let msgsss = await Smd.sendMessage(user, { text: Scan_Id });
+                        console.log("✅ First message sent! Response:", msgsss);
+                        
+                        console.log("📨 Sending welcome message...");
                         await Smd.sendMessage(user, { text: MESSAGE }, { quoted: msgsss });
+                        console.log("✅ Welcome message sent!");
+                        
                         await delay(1000);
-                        try { await fs.emptyDirSync(__dirname + '/auth_info_baileys'); } catch (e) {}
+                        
+                        console.log("🧹 Cleaning up...");
+                        try { 
+                            await fs.emptyDirSync(__dirname + '/auth_info_baileys'); 
+                            console.log("✅ Cleanup complete!");
+                        } catch (e) {
+                            console.log("⚠️ Cleanup error:", e);
+                        }
 
                     } catch (e) {
-                        console.log("Error during file upload or message send: ", e);
+                        console.log("❌ ERROR during file upload or message send:");
+                        console.log("Error name:", e.name);
+                        console.log("Error message:", e.message);
+                        console.log("Full error:", e);
                     }
 
                     await delay(100);
@@ -99,6 +132,8 @@ router.get('/', async (req, res) => {
                 // Handle connection closures
                 if (connection === "close") {
                     let reason = new Boom(lastDisconnect?.error)?.output.statusCode;
+                    console.log("🔴 Connection closed. Reason code:", reason);
+                    
                     if (reason === DisconnectReason.connectionClosed) {
                         console.log("Connection closed!");
                     } else if (reason === DisconnectReason.connectionLost) {
@@ -118,7 +153,8 @@ router.get('/', async (req, res) => {
             });
 
         } catch (err) {
-            console.log("Error in SUHAIL function: ", err);
+            console.log("❌ Error in SUHAIL function: ", err);
+            console.log("Error details:", err.message);
             exec('pm2 restart qasim');
             console.log("Service restarted due to error");
             SUHAIL();
