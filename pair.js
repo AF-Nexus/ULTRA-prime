@@ -33,7 +33,7 @@ router.get('/', async (req, res) => {
         makeCacheableSignalKeyStore,
         Browsers,
         DisconnectReason
-    } = baileys;
+    } = @whiskeysockets/baileys;
 
     let num = req.query.number;
 
