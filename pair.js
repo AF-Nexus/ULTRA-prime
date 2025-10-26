@@ -16,15 +16,7 @@ const MESSAGE = process.env.MESSAGE || `
 > ✅ Thank you for choosing *EF-PRIME-MD V2*!
 > 🔒 Your session is now active and secured`;
 
-const uploadToPastebin = require('./Paste');  // Assuming you have a function to upload to Pastebin
-const {
-    default: makeWASocket,
-    useMultiFileAuthState,
-    delay,
-    makeCacheableSignalKeyStore,
-    Browsers,
-    DisconnectReason
-} = require("@whiskeysockets/baileys");
+const uploadToPastebin = require('./Paste');
 
 // Ensure the directory is empty when the app starts
 if (fs.existsSync('./auth_info_baileys')) {
@@ -32,6 +24,17 @@ if (fs.existsSync('./auth_info_baileys')) {
 }
 
 router.get('/', async (req, res) => {
+    // Dynamic import of baileys
+    const baileys = await import("@whiskeysockets/baileys");
+    const {
+        default: makeWASocket,
+        useMultiFileAuthState,
+        delay,
+        makeCacheableSignalKeyStore,
+        Browsers,
+        DisconnectReason
+    } = baileys;
+
     let num = req.query.number;
 
     async function SUHAIL() {
