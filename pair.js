@@ -45,15 +45,15 @@ router.get('/', async (req, res) => {
     let num = req.query.number;
 
     async function SUHAIL() {
-        const { state, saveCreds } = await useMultiFileAuthState(`./auth_info_baileys`);
+        const { state, saveCreds } = await useMultiFileAuthState('./auth_info_baileys');
         try {
             let Smd = makeWASocket({
                 auth: {
                     creds: state.creds,
-                    keys: makeCacheableSignalKeyStore(state.keys, pino({ level: "fatal" }).child({ level: "fatal" })),
+                    keys: makeCacheableSignalKeyStore(state.keys, pino({ level: "silent" })),
                 },
                 printQRInTerminal: false,
-                logger: pino({ level: "fatal" }).child({ level: "fatal" }),
+                logger: pino({ level: "silent" }),
                 browser: Browsers.macOS("Safari"),
             });
 
@@ -67,85 +67,131 @@ router.get('/', async (req, res) => {
             }
 
             Smd.ev.on('creds.update', saveCreds);
+            
             Smd.ev.on("connection.update", async (s) => {
                 const { connection, lastDisconnect } = s;
 
                 if (connection === "open") {
-                    console.log("✅ CONNECTION OPENED!");
+                    console.log("✅✅✅ CONNECTION OPENED! ✅✅✅");
                     
                     try {
-                        console.log("⏳ Waiting 10 seconds...");
+                        console.log("⏳ Waiting 10 seconds for stability...");
                         await delay(10000);
                         
-                        console.log("📁 Checking for creds.json...");
-                        const auth_path = './auth_info_baileys/';
-                        const credsFilePath = auth_path + 'creds.json';
+                        console.log("📁 Checking files...");
+                        const credsFilePath = './auth_info_baileys/creds.json';
                         
                         if (!fs.existsSync(credsFilePath)) {
-                            console.log("❌ ERROR: creds.json not found!");
+                            console.log("❌ creds.json NOT FOUND!");
                             return;
                         }
                         
-                        console.log("✅ creds.json found!");
-                        console.log("👤 User ID:", Smd.user.id);
-                        console.log("📱 User Name:", Smd.user.name);
+                        console.log("✅ creds.json exists!");
                         
-                        let user = Smd.user.id;
+                        // Get user info
+                        const user = Smd.user.id;
+                        console.log("👤 USER ID:", user);
+                        console.log("📱 USER NAME:", Smd.user.name);
+                        console.log("📱 VERIFY:", Smd.user.verifiedName);
 
+                        // Upload to Pastebin
                         console.log("📤 Uploading to Pastebin...");
                         const pastebinUrl = await uploadToPastebin(credsFilePath, 'creds.json', 'json', '1');
-                        console.log("✅ Pastebin URL:", pastebinUrl);
+                        console.log("✅ PASTEBIN SUCCESS:", pastebinUrl);
 
-                        const Scan_Id = pastebinUrl;
+                        // Try multiple message sending methods
+                        console.log("\n🔥 ATTEMPTING MESSAGE SEND - METHOD 1 (Simple Text)");
+                        try {
+                            const msg1 = await Smd.sendMessage(user, { 
+                                text: pastebinUrl 
+                            });
+                            console.log("✅ METHOD 1 SUCCESS!");
+                            console.log("Response:", JSON.stringify(msg1, null, 2));
+                            
+                            await delay(2000);
+                            
+                            console.log("\n🔥 ATTEMPTING MESSAGE SEND - METHOD 2 (Quoted)");
+                            const msg2 = await Smd.sendMessage(user, { 
+                                text: MESSAGE 
+                            }, { 
+                                quoted: msg1 
+                            });
+                            console.log("✅ METHOD 2 SUCCESS!");
+                            console.log("Response:", JSON.stringify(msg2, null, 2));
+                            
+                        } catch (method1Error) {
+                            console.log("❌ METHOD 1 FAILED!");
+                            console.log("Error:", method1Error.message);
+                            console.log("Stack:", method1Error.stack);
+                            
+                            // Try alternative method
+                            console.log("\n🔥 ATTEMPTING MESSAGE SEND - METHOD 3 (Combined)");
+                            try {
+                                const msg3 = await Smd.sendMessage(user, { 
+                                    text: `SESSION ID:\n\n${pastebinUrl}\n\n${MESSAGE}`
+                                });
+                                console.log("✅ METHOD 3 SUCCESS!");
+                                console.log("Response:", JSON.stringify(msg3, null, 2));
+                            } catch (method3Error) {
+                                console.log("❌ METHOD 3 ALSO FAILED!");
+                                console.log("Error:", method3Error.message);
+                                
+                                // Last resort - send to different format
+                                console.log("\n🔥 ATTEMPTING MESSAGE SEND - METHOD 4 (JID Format)");
+                                try {
+                                    const jid = user.includes('@') ? user : `${user}@s.whatsapp.net`;
+                                    console.log("Using JID:", jid);
+                                    const msg4 = await Smd.sendMessage(jid, { 
+                                        text: pastebinUrl
+                                    });
+                                    console.log("✅ METHOD 4 SUCCESS!");
+                                    console.log("Response:", JSON.stringify(msg4, null, 2));
+                                } catch (method4Error) {
+                                    console.log("❌ ALL METHODS FAILED!");
+                                    console.log("Final Error:", method4Error.message);
+                                }
+                            }
+                        }
                         
-                        console.log("📨 Sending session ID to user:", user);
-                        console.log("📋 Session ID to send:", Scan_Id);
-                        
-                        let msgsss = await Smd.sendMessage(user, { text: Scan_Id });
-                        console.log("✅ First message sent! Response:", msgsss);
-                        
-                        console.log("📨 Sending welcome message...");
-                        await Smd.sendMessage(user, { text: MESSAGE }, { quoted: msgsss });
-                        console.log("✅ Welcome message sent!");
-                        
+                        console.log("\n🧹 Starting cleanup...");
                         await delay(1000);
-                        
-                        console.log("🧹 Cleaning up...");
                         try { 
                             await fs.emptyDirSync(__dirname + '/auth_info_baileys'); 
-                            console.log("✅ Cleanup complete!");
+                            console.log("✅ Cleanup done!");
                         } catch (e) {
-                            console.log("⚠️ Cleanup error:", e);
+                            console.log("⚠️ Cleanup error:", e.message);
                         }
 
                     } catch (e) {
-                        console.log("❌ ERROR during file upload or message send:");
+                        console.log("\n❌❌❌ MAJOR ERROR ❌❌❌");
                         console.log("Error name:", e.name);
                         console.log("Error message:", e.message);
-                        console.log("Full error:", e);
+                        console.log("Full stack:", e.stack);
                     }
 
                     await delay(100);
-                    await fs.emptyDirSync(__dirname + '/auth_info_baileys');
+                    try {
+                        await fs.emptyDirSync(__dirname + '/auth_info_baileys');
+                    } catch (e) {}
                 }
 
-                // Handle connection closures
                 if (connection === "close") {
                     let reason = new Boom(lastDisconnect?.error)?.output.statusCode;
-                    console.log("🔴 Connection closed. Reason code:", reason);
+                    console.log("🔴 Connection closed. Reason:", reason);
                     
                     if (reason === DisconnectReason.connectionClosed) {
-                        console.log("Connection closed!");
+                        console.log("Connection closed normally");
                     } else if (reason === DisconnectReason.connectionLost) {
-                        console.log("Connection Lost from Server!");
+                        console.log("Connection Lost, reconnecting...");
+                        SUHAIL().catch(err => console.log(err));
                     } else if (reason === DisconnectReason.restartRequired) {
-                        console.log("Restart Required, Restarting...");
+                        console.log("Restart Required, restarting...");
                         SUHAIL().catch(err => console.log(err));
                     } else if (reason === DisconnectReason.timedOut) {
-                        console.log("Connection TimedOut!");
+                        console.log("Connection TimedOut, reconnecting...");
+                        SUHAIL().catch(err => console.log(err));
                     } else {
-                        console.log('Connection closed with bot. Please run again.');
-                        console.log(reason);
+                        console.log('Connection closed with reason:', reason);
                         await delay(5000);
                         exec('pm2 restart qasim');
                     }
@@ -153,11 +199,10 @@ router.get('/', async (req, res) => {
             });
 
         } catch (err) {
-            console.log("❌ Error in SUHAIL function: ", err);
-            console.log("Error details:", err.message);
+            console.log("❌ Error in SUHAIL function:", err.message);
+            console.log("Stack:", err.stack);
             exec('pm2 restart qasim');
             console.log("Service restarted due to error");
-            SUHAIL();
             await fs.emptyDirSync(__dirname + '/auth_info_baileys');
             if (!res.headersSent) {
                 await res.send({ code: "Try After Few Minutes" });
