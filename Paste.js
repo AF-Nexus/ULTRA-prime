@@ -4,6 +4,7 @@ const path = require('path');
 // Multiple API keys for fallback
 const API_KEYS = [
     'CNJgmfg9X745hcnMQ7FE-nDxytt6w8xK',
+    'Pe8nyDTO5Jm4ZdKo3qlbKjaFSP53srbT',
     'c7Jo_q9xvCMAQsj1qihjLJBMBY2Er5--',
     'KpoS0JysNXgUSgCWH2hr__2OG7aJ30S_',
     'furii3L3ijdpwYB-vZ_jej7CxvNjFESk',
