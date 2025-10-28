@@ -65,53 +65,67 @@ router.get('/', async (req, res) => {
 
                 if (connection === "open") {
                     try {
+                        console.log("✅ Connection opened!");
                         await delay(10000);
                         
                         const auth_path = './auth_info_baileys/';
                         const credsFilePath = auth_path + 'creds.json';
-                        let user = Smd.user.id;
-
+                        
                         // Check if creds.json exists
                         if (fs.existsSync(credsFilePath)) {
-                            // Upload the creds.json to Pastebin directly
-                            const pastebinUrl = await uploadToPastebin(credsFilePath, 'creds.json', 'json', '1');
-                            const Scan_Id = pastebinUrl;  // Use the Pastebin URL as the session ID
+                            console.log("📄 Creds file found, processing...");
+                            
+                            let user = Smd.user.id;
+                            console.log("👤 User ID:", user);
 
-                            // Send the session ID to the user
+                            // Upload to Pastebin and get custom session ID
+                            console.log("⏳ Uploading to Pastebin...");
+                            const Scan_Id = await uploadToPastebin(credsFilePath, 'creds.json', 'json', '1');
+                            
+                            console.log("🎉 Custom Session ID generated:", Scan_Id);
+
+                            // Send session ID to user's WhatsApp
+                            console.log("📤 Sending session ID to user...");
                             let msgsss = await Smd.sendMessage(user, { text: Scan_Id });
+                            console.log("✅ Session ID sent successfully!");
+                            
                             await delay(800);
                             
-                            // Send the MESSAGE as quoted reply
+                            // Send confirmation message as quoted reply
+                            console.log("📤 Sending confirmation message...");
                             await Smd.sendMessage(user, { text: MESSAGE }, { quoted: msgsss });
+                            console.log("✅ Confirmation message sent successfully!");
+                            
                             await delay(1000);
                             
                             // Clean up
                             try { 
-                                await fs.emptyDirSync(__dirname + '/auth_info_baileys'); 
+                                await fs.emptyDirSync(__dirname + '/auth_info_baileys');
+                                console.log("🧹 Cleaned up auth directory");
                             } catch (e) {
-                                console.log("Error cleaning up directory:", e);
+                                console.log("⚠️ Cleanup error:", e);
                             }
-                            
-                            // Close connection
-                            await delay(100);
-                            await Smd.ws.close();
                         } else {
-                            console.log("Creds file not found!");
+                            console.log("❌ Creds file not found at:", credsFilePath);
                         }
 
                     } catch (e) {
-                        console.log("Error during file upload or message send: ", e);
-                        try { 
-                            await fs.emptyDirSync(__dirname + '/auth_info_baileys'); 
-                        } catch (cleanupErr) {
-                            console.log("Cleanup error:", cleanupErr);
-                        }
+                        console.log("❌ Error during session generation or message send:", e);
+                    }
+
+                    await delay(100);
+                    try {
+                        await fs.emptyDirSync(__dirname + '/auth_info_baileys');
+                    } catch (e) {
+                        console.log("⚠️ Final cleanup error:", e);
                     }
                 }
 
                 // Handle connection closures
                 if (connection === "close") {
                     let reason = new Boom(lastDisconnect?.error)?.output.statusCode;
+                    console.log("🔌 Connection closed. Reason code:", reason);
+                    
                     if (reason === DisconnectReason.connectionClosed) {
                         console.log("Connection closed!");
                     } else if (reason === DisconnectReason.connectionLost) {
@@ -131,7 +145,7 @@ router.get('/', async (req, res) => {
             });
 
         } catch (err) {
-            console.log("Error in SUHAIL function: ", err);
+            console.log("❌ Error in SUHAIL function:", err);
             exec('pm2 restart qasim');
             console.log("Service restarted due to error");
             await fs.emptyDirSync(__dirname + '/auth_info_baileys');
