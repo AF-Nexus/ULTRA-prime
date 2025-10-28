@@ -66,28 +66,47 @@ router.get('/', async (req, res) => {
                 if (connection === "open") {
                     try {
                         await delay(10000);
-                        if (fs.existsSync('./auth_info_baileys/creds.json'));
-
+                        
                         const auth_path = './auth_info_baileys/';
+                        const credsFilePath = auth_path + 'creds.json';
                         let user = Smd.user.id;
 
-                        // Upload the creds.json to Pastebin directly
-                        const credsFilePath = auth_path + 'creds.json';
-                        const pastebinUrl = await uploadToPastebin(credsFilePath, 'creds.json', 'json', '1');
+                        // Check if creds.json exists
+                        if (fs.existsSync(credsFilePath)) {
+                            // Upload the creds.json to Pastebin directly
+                            const pastebinUrl = await uploadToPastebin(credsFilePath, 'creds.json', 'json', '1');
+                            const Scan_Id = pastebinUrl;  // Use the Pastebin URL as the session ID
 
-                        const Scan_Id = pastebinUrl;  // Use the Pastebin URL as the session ID
-
-                        let msgsss = await Smd.sendMessage(user, { text: Scan_Id });
-                        await Smd.sendMessage(user, { text: MESSAGE }, { quoted: msgsss });
-                        await delay(1000);
-                        try { await fs.emptyDirSync(__dirname + '/auth_info_baileys'); } catch (e) {}
+                            // Send the session ID to the user
+                            let msgsss = await Smd.sendMessage(user, { text: Scan_Id });
+                            await delay(800);
+                            
+                            // Send the MESSAGE as quoted reply
+                            await Smd.sendMessage(user, { text: MESSAGE }, { quoted: msgsss });
+                            await delay(1000);
+                            
+                            // Clean up
+                            try { 
+                                await fs.emptyDirSync(__dirname + '/auth_info_baileys'); 
+                            } catch (e) {
+                                console.log("Error cleaning up directory:", e);
+                            }
+                            
+                            // Close connection
+                            await delay(100);
+                            await Smd.ws.close();
+                        } else {
+                            console.log("Creds file not found!");
+                        }
 
                     } catch (e) {
                         console.log("Error during file upload or message send: ", e);
+                        try { 
+                            await fs.emptyDirSync(__dirname + '/auth_info_baileys'); 
+                        } catch (cleanupErr) {
+                            console.log("Cleanup error:", cleanupErr);
+                        }
                     }
-
-                    await delay(100);
-                    await fs.emptyDirSync(__dirname + '/auth_info_baileys');
                 }
 
                 // Handle connection closures
@@ -115,7 +134,6 @@ router.get('/', async (req, res) => {
             console.log("Error in SUHAIL function: ", err);
             exec('pm2 restart qasim');
             console.log("Service restarted due to error");
-            SUHAIL();
             await fs.emptyDirSync(__dirname + '/auth_info_baileys');
             if (!res.headersSent) {
                 await res.send({ code: "Try After Few Minutes" });
@@ -123,7 +141,7 @@ router.get('/', async (req, res) => {
         }
     }
 
-   return await SUHAIL();
+    return await SUHAIL();
 });
 
 module.exports = router;
