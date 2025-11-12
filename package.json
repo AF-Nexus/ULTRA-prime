@@ -25,7 +25,7 @@
   "dependencies": {
     "@hapi/boom": "^10.0.1",
 
-        "@whiskeysockets/baileys": "npm:angularsockets",
+        "@whiskeysockets/baileys": "github:Jeliostarr/DEV-Baileys",
     "dotenv": "^16.4.7",
     "fs-extra": "^11.3.0",
     "node-fetch": "^2.6.1",
