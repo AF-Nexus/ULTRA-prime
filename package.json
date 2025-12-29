@@ -24,8 +24,7 @@
   "license": "MIT",
   "dependencies": {
     "@hapi/boom": "^10.0.1",
-
-      "@whiskeysockets/baileys": "npm:angularsockets",
+    "@whiskeysockets/baileys": "^v7.0.0-rc.9",
     "jimp": " ^0.22.10", 
     "dotenv": "^16.4.7",
     "fs-extra": "^11.3.0",
