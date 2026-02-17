@@ -16,7 +16,15 @@ const MESSAGE = process.env.MESSAGE || `
 > ✅ Thank you for choosing *EF-PRIME-MD V2*!
 > 🔒 Your session is now active and secured`;
 
-const uploadToPastebin = require('./Paste');
+const uploadToPastebin = require('./Paste');  // Assuming you have a function to upload to Pastebin
+const {
+    default: makeWASocket,
+    useMultiFileAuthState,
+    delay,
+    makeCacheableSignalKeyStore,
+    Browsers,
+    DisconnectReason
+} = require("@whiskeysockets/baileys");
 
 // Ensure the directory is empty when the app starts
 if (fs.existsSync('./auth_info_baileys')) {
@@ -25,16 +33,6 @@ if (fs.existsSync('./auth_info_baileys')) {
 
 router.get('/', async (req, res) => {
     let num = req.query.number;
-
-    // Dynamic import for Baileys (fixes ES Module error)
-    const {
-        default: makeWASocket,
-        useMultiFileAuthState,
-        delay,
-        makeCacheableSignalKeyStore,
-        Browsers,
-        DisconnectReason
-    } = await import("@whiskeysockets/baileys");
 
     async function SUHAIL() {
         const { state, saveCreds } = await useMultiFileAuthState(`./auth_info_baileys`);
@@ -65,54 +63,28 @@ router.get('/', async (req, res) => {
                 if (connection === "open") {
                     try {
                         await delay(10000);
-                        
-                        const auth_path = './auth_info_baileys/';
-                        const credsFilePath = auth_path + 'creds.json';
-                        
-                        // Check if creds.json exists
-                        if (!fs.existsSync(credsFilePath)) {
-                            console.log("creds.json not found!");
-                            return;
-                        }
+                        if (fs.existsSync('./auth_info_baileys/creds.json'));
 
+                        const auth_path = './auth_info_baileys/';
                         let user = Smd.user.id;
 
-                        console.log("Uploading session to Pastebin...");
-                        
                         // Upload the creds.json to Pastebin directly
+                        const credsFilePath = auth_path + 'creds.json';
                         const pastebinUrl = await uploadToPastebin(credsFilePath, 'creds.json', 'json', '1');
-                        
-                        if (!pastebinUrl) {
-                            console.log("Pastebin upload failed!");
-                            return;
-                        }
 
-                        const Scan_Id = pastebinUrl;
+                        const Scan_Id = pastebinUrl;  // Use the Pastebin URL as the session ID
 
-                        console.log("Session ID:", Scan_Id);
-                        console.log("Sending to user:", user);
-
-                        // Send session ID to user
                         let msgsss = await Smd.sendMessage(user, { text: Scan_Id });
-                        
-                        // Send welcome message
                         await Smd.sendMessage(user, { text: MESSAGE }, { quoted: msgsss });
-                        
-                        console.log("Session ID sent successfully!");
-                        
                         await delay(1000);
                         try { await fs.emptyDirSync(__dirname + '/auth_info_baileys'); } catch (e) {}
 
                     } catch (e) {
-                        console.log("Error during file upload or message send:", e);
+                        console.log("Error during file upload or message send: ", e);
                     }
 
                     await delay(100);
-                    try {
-                        await fs.emptyDirSync(__dirname + '/auth_info_baileys');
-                    } catch (e) {
-                        console.log("Error cleaning auth folder:", e);
-                    }
+                    await fs.emptyDirSync(__dirname + '/auth_info_baileys');
                 }
 
                 // Handle connection closures
@@ -137,12 +109,11 @@ router.get('/', async (req, res) => {
             });
 
         } catch (err) {
-            console.log("Error in SUHAIL function:", err);
+            console.log("Error in SUHAIL function: ", err);
             exec('pm2 restart qasim');
             console.log("Service restarted due to error");
-            try {
-                await fs.emptyDirSync(__dirname + '/auth_info_baileys');
-            } catch (e) {}
+            SUHAIL();
+            await fs.emptyDirSync(__dirname + '/auth_info_baileys');
             if (!res.headersSent) {
                 await res.send({ code: "Try After Few Minutes" });
             }
