@@ -88,7 +88,7 @@ async function uploadToPastebin(input, title = 'Untitled', format = 'json', priv
             return customUrl;
 
         } catch (error) {
-            console.error(`Error uploading to Pastebin with API key ${i + 1}:`, error.message);
+            console.error(`Error uploading to Pastebin with API key ${i + 1}:`, error);
             lastError = error;
 
             // If this isn't the last API key, continue to the next one
@@ -100,7 +100,6 @@ async function uploadToPastebin(input, title = 'Untitled', format = 'json', priv
     }
 
     // If all API keys failed, throw the last error
-    console.error('All API keys failed. Last error:', lastError?.message);
     throw lastError;
 }
 
