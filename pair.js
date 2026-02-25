@@ -29,7 +29,6 @@ router.get('/', async (req, res) => {
         return res.status(400).json({ error: 'Phone number is required. Use ?number=2637XXXXXXXX' });
     }
 
-    // Strip to digits only — E.164 without plus sign
     num = num.replace(/[^0-9]/g, '');
 
     if (num.length < 7) {
@@ -44,11 +43,10 @@ router.get('/', async (req, res) => {
             fs.mkdirSync(AUTH_DIR, { recursive: true });
         }
     } catch (e) {
-        console.error('[Auth Dir] Error cleaning:', e.message);
+        console.error('[Auth Dir] Error:', e.message);
     }
 
     try {
-        // ✅ Dynamic import — baileys v7 is ESM only
         const {
             default: makeWASocket,
             useMultiFileAuthState,
@@ -59,9 +57,8 @@ router.get('/', async (req, res) => {
             DisconnectReason
         } = await import('@whiskeysockets/baileys');
 
-        // Fetch latest WA version to avoid version mismatch issues
         const { version, isLatest } = await fetchLatestBaileysVersion();
-        console.log(`[Baileys] Using WA v${version.join('.')}, isLatest: ${isLatest}`);
+        console.log(`[Baileys] WA v${version.join('.')}, isLatest: ${isLatest}`);
 
         const { state, saveCreds } = await useMultiFileAuthState(AUTH_DIR);
         const logger = pino({ level: 'fatal' }).child({ level: 'fatal' });
@@ -72,10 +69,23 @@ router.get('/', async (req, res) => {
                 creds: state.creds,
                 keys: makeCacheableSignalKeyStore(state.keys, logger),
             },
-            printQRInTerminal: false,
             logger,
+            printQRInTerminal: false,
+
+            // ✅ Keep connection alive — prevents browser/WA from dropping the session
+            keepAliveIntervalMs: 10_000,          // ping WA every 10s
+            connectTimeoutMs: 60_000,             // wait up to 60s to connect
+            retryRequestDelayMs: 250,             // fast retry on failed requests
+            maxMsgRetryCount: 5,                  // retry sending up to 5 times
+
+            // ✅ Stable browser — Chrome on Ubuntu is least likely to be flagged/dropped
             browser: Browsers.ubuntu('Chrome'),
-            markOnlineOnConnect: false,
+            markOnlineOnConnect: false,           // don't mark online, reduces WA scrutiny
+
+            // ✅ Prevent WA from thinking client is idle/stale
+            fireInitQueries: true,
+            generateHighQualityLinkPreview: false,
+            syncFullHistory: false,
         });
 
         sock.ev.on('creds.update', saveCreds);
@@ -84,27 +94,23 @@ router.get('/', async (req, res) => {
 
         sock.ev.on('connection.update', async (update) => {
             const { connection, lastDisconnect, qr } = update;
+            console.log('[Connection Update]', connection || 'event', { qr: !!qr, pairingCodeSent });
 
-            console.log('[Connection Update]', { connection, hasPairingCode: pairingCodeSent, hasQR: !!qr });
-
-            // ✅ THE CORRECT v7 FLOW:
-            // Request pairing code as soon as socket starts connecting or QR is available
-            // The key is: sock must exist but creds must NOT be registered yet
+            // ✅ Request pairing code as soon as connecting or QR is available
             if (!pairingCodeSent && !sock.authState.creds.registered) {
                 if (connection === 'connecting' || !!qr) {
                     pairingCodeSent = true;
                     try {
-                        // Small delay to ensure WA handshake has started
-                        await delay(2000);
+                        await delay(1500);
                         const code = await sock.requestPairingCode(num);
                         const formatted = code?.match(/.{1,4}/g)?.join('-') || code;
-                        console.log(`[Pairing] Code: ${formatted}`);
+                        console.log(`[Pairing] Code for ${num}: ${formatted}`);
                         if (!res.headersSent) {
                             res.json({ code: formatted });
                         }
                     } catch (err) {
                         console.error('[Pairing] Error:', err.message);
-                        pairingCodeSent = false; // allow retry on next event
+                        pairingCodeSent = false;
                         if (!res.headersSent) {
                             res.status(500).json({ error: 'Could not generate pairing code. Try again.' });
                         }
@@ -112,25 +118,29 @@ router.get('/', async (req, res) => {
                 }
             }
 
-            // ✅ Connected — upload creds to Pastebin and DM the session ID
+            // ✅ Connection open — upload creds immediately, no long waits
             if (connection === 'open') {
-                console.log('[Connection] Open! Waiting for creds to be written...');
+                console.log('[Connection] Open! Uploading creds...');
                 try {
-                    // Give baileys time to write all creds files
-                    await delay(10000);
+                    // ✅ Short delay — just enough for creds to be written to disk
+                    // DO NOT use 10s delay here, that causes the WA session to look idle/stale
+                    await delay(3000);
 
                     const credsFile = path.join(AUTH_DIR, 'creds.json');
 
-                    // Retry waiting for creds.json
-                    for (let i = 0; i < 10; i++) {
+                    // Quick retry loop if file isn't written yet
+                    for (let i = 0; i < 8; i++) {
                         if (fs.existsSync(credsFile)) break;
-                        console.log(`[Upload] Waiting for creds.json... attempt ${i + 1}`);
-                        await delay(2000);
+                        console.log(`[Upload] Waiting for creds.json... (${i + 1}/8)`);
+                        await delay(1000);
                     }
 
                     if (!fs.existsSync(credsFile)) {
-                        throw new Error('creds.json was never created.');
+                        throw new Error('creds.json was never written to disk.');
                     }
+
+                    // ✅ Send a keep-alive presence so WA doesn't close connection during upload
+                    await sock.sendPresenceUpdate('available');
 
                     const sessionId = await uploadToPastebin(credsFile, 'creds.json', 'json', '1');
                     console.log('[Upload] Session ID:', sessionId);
@@ -139,38 +149,40 @@ router.get('/', async (req, res) => {
                     const sent = await sock.sendMessage(userId, { text: sessionId });
                     await sock.sendMessage(userId, { text: MESSAGE }, { quoted: sent });
 
-                    console.log('[Done] Session sent to WhatsApp successfully!');
-                    await delay(2000);
+                    console.log('[Done] Session sent to WhatsApp!');
+                    await delay(1000);
 
                 } catch (e) {
                     console.error('[Upload] Error:', e.message);
                 }
 
-                // Cleanup auth dir
+                // Cleanup
                 try { fs.emptyDirSync(AUTH_DIR); } catch (e) {}
             }
 
-            // ✅ Handle disconnection reasons properly
+            // ✅ Disconnection handling
             if (connection === 'close') {
                 const statusCode = new Boom(lastDisconnect?.error)?.output?.statusCode;
-                console.log('[Connection] Closed. Status:', statusCode);
+                console.log('[Connection] Closed. Reason:', statusCode);
 
                 if (statusCode === DisconnectReason.loggedOut) {
-                    console.log('[Connection] Logged out. Clearing auth...');
+                    console.log('[Connection] Logged out.');
                     try { fs.emptyDirSync(AUTH_DIR); } catch (e) {}
 
                 } else if (statusCode === DisconnectReason.restartRequired) {
-                    console.log('[Connection] Restart required.');
-                    // Do NOT call SUHAIL again here — this is a pairing session, not a persistent bot
+                    console.log('[Connection] Restart required — this is normal after pairing.');
 
                 } else if (statusCode === DisconnectReason.connectionReplaced) {
-                    console.log('[Connection] Connection replaced by another device.');
+                    console.log('[Connection] Replaced by another connection.');
 
                 } else if (statusCode === DisconnectReason.timedOut) {
-                    console.log('[Connection] Timed out.');
+                    console.log('[Connection] Timed out — WA server did not respond.');
+
+                } else if (statusCode === DisconnectReason.connectionClosed) {
+                    console.log('[Connection] WA closed the connection.');
 
                 } else {
-                    console.log('[Connection] Closed with code:', statusCode, '— restarting pm2...');
+                    console.log('[Connection] Unexpected close, restarting pm2 in 5s...');
                     await delay(5000);
                     exec('pm2 restart qasim');
                 }
@@ -181,7 +193,7 @@ router.get('/', async (req, res) => {
         console.error('[Route] Fatal error:', err.message);
         try { fs.emptyDirSync(AUTH_DIR); } catch (e) {}
         if (!res.headersSent) {
-            res.status(500).json({ error: 'Internal server error. Try again in a few minutes.' });
+            res.status(500).json({ error: 'Internal server error. Try again.' });
         }
     }
 });
