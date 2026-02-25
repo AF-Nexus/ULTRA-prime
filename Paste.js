@@ -1,9 +1,8 @@
 const fs = require('fs');
-const path = require('path');
+const fetch = require('node-fetch');
 
 // Multiple API keys for fallback
 const API_KEYS = [
-    '',
     'Pe8nyDTO5Jm4ZdKo3qlbKjaFSP53srbT',
     'c7Jo_q9xvCMAQsj1qihjLJBMBY2Er5--',
     'KpoS0JysNXgUSgCWH2hr__2OG7aJ30S_',
@@ -13,94 +12,90 @@ const API_KEYS = [
 ];
 
 /**
- * Uploads content to Pastebin, handling different input types like text, files, and base64 data.
- * @param {string | Buffer} input - The content to upload, can be text, file path, or base64 data.
- * @param {string} [title] - Optional title for the paste.
- * @param {string} [format] - Optional syntax highlighting format (e.g., 'text', 'python', 'javascript').
- * @param {string} [privacy] - Optional privacy setting (0 = public, 1 = unlisted, 2 = private).
- * @returns {Promise} - The custom URL of the created paste.
+ * Uploads content to Pastebin using raw HTTP (no ESM dependency issues).
+ * @param {string|Buffer} input - Text, file path, or Buffer to upload.
+ * @param {string} title - Title for the paste.
+ * @param {string} format - Syntax format (e.g. 'json', 'text').
+ * @param {string} privacy - '0' public, '1' unlisted, '2' private.
+ * @returns {Promise<string>} - Custom session ID string.
  */
-async function uploadToPastebin(input, title = 'Untitled', format = 'json', privacy = '1') {
+async function uploadToPastebin(input, title = 'creds.json', format = 'json', privacy = '1') {
+    // Resolve content
+    let content = '';
+
+    if (Buffer.isBuffer(input)) {
+        content = input.toString('utf8');
+    } else if (typeof input === 'string') {
+        if (input.startsWith('data:')) {
+            // base64 data URL
+            const base64Data = input.split(',')[1];
+            content = Buffer.from(base64Data, 'base64').toString('utf8');
+        } else if (fs.existsSync(input)) {
+            // file path
+            content = fs.readFileSync(input, 'utf8');
+        } else {
+            // plain text / URL
+            content = input;
+        }
+    } else {
+        throw new Error('Unsupported input type. Provide text, a file path, or a Buffer.');
+    }
+
+    if (!content || content.trim() === '') {
+        throw new Error('Content to upload is empty.');
+    }
+
     let lastError = null;
 
-    // Try each API key in sequence
     for (let i = 0; i < API_KEYS.length; i++) {
-        const PASTEBIN_API_KEY = API_KEYS[i];
-        console.log(`Attempting upload with API key ${i + 1}/${API_KEYS.length}...`);
+        const apiKey = API_KEYS[i];
+        console.log(`[Pastebin] Trying API key ${i + 1}/${API_KEYS.length}...`);
 
         try {
-            // Dynamically import the `pastebin-api` ES module
-            const { PasteClient, Publicity } = await import('pastebin-api');
+            const params = new URLSearchParams();
+            params.append('api_dev_key', apiKey);
+            params.append('api_option', 'paste');
+            params.append('api_paste_code', content);
+            params.append('api_paste_name', title);
+            params.append('api_paste_format', format);
+            params.append('api_paste_private', privacy);
+            params.append('api_paste_expire_date', 'N'); // Never expire
 
-            // Initialize the Pastebin client
-            const client = new PasteClient(PASTEBIN_API_KEY);
-
-            // Map privacy settings to `pastebin-api`'s Publicity enum
-            const publicityMap = {
-                '0': Publicity.Public,
-                '1': Publicity.Unlisted,
-                '2': Publicity.Private,
-            };
-
-            let contentToUpload = '';
-
-            // Detect the type of input and process accordingly
-            if (Buffer.isBuffer(input)) {
-                // If the input is a Buffer (file content), convert it to string
-                contentToUpload = input.toString();
-            } else if (typeof input === 'string') {
-                if (input.startsWith('data:')) {
-                    // If the input is a base64 string, extract the actual base64 data
-                    const base64Data = input.split(',')[1];
-                    contentToUpload = Buffer.from(base64Data, 'base64').toString();
-                } else if (input.startsWith('http://') || input.startsWith('https://')) {
-                    // If it's a URL, treat it as plain text
-                    contentToUpload = input;
-                } else if (fs.existsSync(input)) {
-                    // If the input is a file path, read the file (assume it's creds.json in this case)
-                    contentToUpload = fs.readFileSync(input, 'utf8');
-                } else {
-                    // Otherwise, treat it as plain text (code snippet or regular text)
-                    contentToUpload = input;
+            const response = await fetch('https://pastebin.com/api/api_post.php', {
+                method: 'POST',
+                body: params,
+                headers: {
+                    'Content-Type': 'application/x-www-form-urlencoded'
                 }
-            } else {
-                throw new Error('Unsupported input type. Please provide text, a file path, or base64 data.');
-            }
-
-            // Upload the paste
-            const pasteUrl = await client.createPaste({
-                code: contentToUpload,
-                expireDate: 'N', // Never expire
-                format: format, // Syntax highlighting format (set to 'json')
-                name: title, // Title of the paste
-                publicity: publicityMap[privacy], // Privacy setting
             });
 
-            console.log('Original Pastebin URL:', pasteUrl);
+            const text = await response.text();
 
-            // Manipulate the URL: Remove 'https://pastebin.com/' and prepend custom words
-            const pasteId = pasteUrl.replace('https://pastebin.com/', '');
-            const customUrl = `EF-PRIME-MD_${pasteId}`;
+            // Pastebin returns the URL directly on success, or "Bad API request, ..." on error
+            if (!text.startsWith('https://pastebin.com/')) {
+                throw new Error(`Pastebin API error: ${text}`);
+            }
 
-            console.log('Custom URL:', customUrl);
+            console.log(`[Pastebin] Upload successful: ${text}`);
 
-            // Return the custom URL
-            return customUrl;
+            // Extract paste ID and return custom session ID format
+            const pasteId = text.replace('https://pastebin.com/', '').trim();
+            const sessionId = `EF-PRIME-MD_${pasteId}`;
 
-        } catch (error) {
-            console.error(`Error uploading to Pastebin with API key ${i + 1}:`, error);
-            lastError = error;
+            console.log(`[Pastebin] Session ID: ${sessionId}`);
+            return sessionId;
 
-            // If this isn't the last API key, continue to the next one
+        } catch (err) {
+            console.error(`[Pastebin] Key ${i + 1} failed:`, err.message);
+            lastError = err;
+
             if (i < API_KEYS.length - 1) {
-                console.log(`Trying next API key...`);
-                continue;
+                console.log('[Pastebin] Trying next key...');
             }
         }
     }
 
-    // If all API keys failed, throw the last error
-    throw lastError;
+    throw new Error(`All Pastebin API keys failed. Last error: ${lastError?.message}`);
 }
 
 module.exports = uploadToPastebin;
