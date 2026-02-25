@@ -22,7 +22,6 @@ const MESSAGE = process.env.MESSAGE || `
 
 const AUTH_DIR = path.join(__dirname, 'auth_info_baileys');
 
-// ✅ Pure console.log colored logger — zero extra dependencies
 const C = {
     reset:  '\x1b[0m',
     bright: '\x1b[1m',
@@ -88,15 +87,16 @@ router.get('/', async (req, res) => {
         const { version, isLatest } = await fetchLatestBaileysVersion();
         logOk('✅', 'VERSION', `WhatsApp v${version.join('.')} — isLatest: ${isLatest}`);
 
-        // ─── This function creates a socket and handles the full lifecycle ───
-        // It is called once for pairing, then again after restartRequired
-        // to establish the real authenticated session and upload creds.
-        async function createSocket(isPairingPhase) {
+        // shared state across both phases
+        let pairingCodeSent = false;
+        let sessionUploaded = false;
+
+        async function startSocket() {
             log('🔐', 'AUTH STATE', 'Loading auth state...');
             const { state, saveCreds } = await useMultiFileAuthState(AUTH_DIR);
-            logOk('✅', 'AUTH STATE', `Auth loaded. Registered: ${state.creds.registered}`);
+            logOk('✅', 'AUTH STATE', `Auth loaded. Registered: ${C.yellow}${state.creds.registered}${C.reset}`);
 
-            log('🔌', 'SOCKET', `Creating socket — phase: ${isPairingPhase ? 'PAIRING' : 'SESSION'}...`);
+            log('🔌', 'SOCKET', 'Creating WhatsApp socket...');
 
             const sock = makeWASocket({
                 version,
@@ -117,26 +117,25 @@ router.get('/', async (req, res) => {
                 syncFullHistory: false,
             });
 
-            logOk('✅', 'SOCKET', 'Socket created. Listening for events...');
+            logOk('✅', 'SOCKET', 'Socket created.');
 
             sock.ev.on('creds.update', () => {
                 log('💾', 'CREDS', 'Credentials updated — saving...');
                 saveCreds();
-                logOk('✅', 'CREDS', 'Credentials saved to disk.');
+                logOk('✅', 'CREDS', 'Saved to disk.');
             });
-
-            let pairingCodeSent = false;
 
             sock.ev.on('connection.update', async (update) => {
                 const { connection, lastDisconnect, qr, isNewLogin, receivedPendingNotifications } = update;
 
-                if (connection) log('🔄', 'CONNECTION', `State → ${C.bright}${connection.toUpperCase()}${C.reset}`);
+                if (connection)                   log('🔄', 'CONNECTION', `State → ${C.bright}${connection.toUpperCase()}${C.reset}`);
                 if (isNewLogin)                   logOk('🆕', 'LOGIN', 'New login detected!');
                 if (receivedPendingNotifications) log('📬', 'NOTIFICATIONS', 'Received pending notifications.');
                 if (qr)                           logWarn('📸', 'QR', 'QR generated (ignored — using pairing code).');
 
-                // ── PHASE 1: Send pairing code (only during pairing phase) ──
-                if (isPairingPhase && !pairingCodeSent && !sock.authState.creds.registered) {
+                // ── STEP 1: Request pairing code ──
+                // Only if not yet registered AND pairing code not yet sent
+                if (!pairingCodeSent && !state.creds.registered) {
                     if (connection === 'connecting' || !!qr) {
                         pairingCodeSent = true;
                         log('⏳', 'PAIRING', `Requesting pairing code for +${num}...`);
@@ -150,7 +149,7 @@ router.get('/', async (req, res) => {
                             }
                         } catch (err) {
                             logErr('❌', 'PAIRING', `Failed: ${err.message}`);
-                            pairingCodeSent = false;
+                            pairingCodeSent = false; // allow retry
                             if (!res.headersSent) {
                                 res.status(500).json({ error: 'Could not generate pairing code. Try again.' });
                             }
@@ -158,71 +157,70 @@ router.get('/', async (req, res) => {
                     }
                 }
 
-                // ── PHASE 2: Upload creds after real session is open ──
-                if (connection === 'open') {
+                // ── STEP 2: Upload creds once connection is open ──
+                if (connection === 'open' && !sessionUploaded) {
+                    sessionUploaded = true;
                     logOk('🎉', 'CONNECTED', 'WhatsApp connection OPEN! Session established.');
                     log('👤', 'USER', `Logged in as: ${C.green}${sock.user?.id}${C.reset} — Name: ${sock.user?.name || 'Unknown'}`);
 
-                    // Only upload on the session phase (after restart), not during pairing phase
-                    // But if creds are registered it means this is already the real session
-                    if (!isPairingPhase || sock.authState.creds.registered) {
-                        try {
-                            log('⏳', 'UPLOAD', 'Waiting 3s for creds to finish writing...');
-                            await delay(3000);
+                    try {
+                        log('⏳', 'UPLOAD', 'Waiting 3s for creds to finish writing...');
+                        await delay(3000);
 
-                            const credsFile = path.join(AUTH_DIR, 'creds.json');
-                            let found = false;
+                        const credsFile = path.join(AUTH_DIR, 'creds.json');
+                        let found = false;
 
-                            for (let i = 0; i < 8; i++) {
-                                if (fs.existsSync(credsFile)) {
-                                    found = true;
-                                    logOk('✅', 'UPLOAD', `creds.json found (attempt ${i + 1}) — ${fs.statSync(credsFile).size} bytes`);
-                                    break;
-                                }
-                                logWarn('⏳', 'UPLOAD', `creds.json not ready... (${i + 1}/8)`);
-                                await delay(1000);
+                        for (let i = 0; i < 8; i++) {
+                            if (fs.existsSync(credsFile)) {
+                                found = true;
+                                logOk('✅', 'UPLOAD', `creds.json found (attempt ${i + 1}) — ${fs.statSync(credsFile).size} bytes`);
+                                break;
                             }
-
-                            if (!found) throw new Error('creds.json never written after 8 retries.');
-
-                            log('📡', 'PRESENCE', 'Sending presence update...');
-                            await sock.sendPresenceUpdate('available');
-                            logOk('✅', 'PRESENCE', 'Presence sent.');
-
-                            log('🚀', 'PASTEBIN', 'Uploading creds.json to Pastebin...');
-                            const sessionId = await uploadToPastebin(credsFile, 'creds.json', 'json', '1');
-                            logOk('✅', 'PASTEBIN', `Done! Session ID: ${C.green}${C.bright}${sessionId}${C.reset}`);
-
-                            const userId = sock.user.id;
-                            log('📤', 'WHATSAPP', `Sending session ID to ${userId}...`);
-                            const sent = await sock.sendMessage(userId, { text: sessionId });
-                            await sock.sendMessage(userId, { text: MESSAGE }, { quoted: sent });
-                            logOk('🎊', 'DONE', 'Session ID and welcome message delivered!');
-
+                            logWarn('⏳', 'UPLOAD', `creds.json not ready yet... (${i + 1}/8)`);
                             await delay(1000);
-
-                        } catch (e) {
-                            logErr('❌', 'UPLOAD ERROR', e.message);
                         }
 
-                        log('🧹', 'CLEANUP', 'Clearing auth directory...');
-                        try { fs.emptyDirSync(AUTH_DIR); } catch (e) {}
-                        logOk('✅', 'CLEANUP', 'Done.');
+                        if (!found) throw new Error('creds.json never written after 8 retries.');
+
+                        log('📡', 'PRESENCE', 'Sending presence update to keep connection alive...');
+                        await sock.sendPresenceUpdate('available');
+                        logOk('✅', 'PRESENCE', 'Presence sent.');
+
+                        log('🚀', 'PASTEBIN', 'Uploading creds.json to Pastebin...');
+                        const sessionId = await uploadToPastebin(credsFile, 'creds.json', 'json', '1');
+                        logOk('✅', 'PASTEBIN', `Done! Session ID: ${C.green}${C.bright}${sessionId}${C.reset}`);
+
+                        const userId = sock.user.id;
+                        log('📤', 'WHATSAPP', `Sending session ID to ${userId}...`);
+                        const sent = await sock.sendMessage(userId, { text: sessionId });
+                        await sock.sendMessage(userId, { text: MESSAGE }, { quoted: sent });
+                        logOk('🎊', 'DONE', 'Session ID and welcome message delivered to WhatsApp!');
+
+                        await delay(1000);
+
+                    } catch (e) {
+                        logErr('❌', 'UPLOAD ERROR', e.message);
+                        sessionUploaded = false; // allow retry if needed
                     }
+
+                    log('🧹', 'CLEANUP', 'Clearing auth directory...');
+                    try { fs.emptyDirSync(AUTH_DIR); } catch (e) {}
+                    logOk('✅', 'CLEANUP', 'Done.');
                 }
 
-                // ── Handle disconnections ──
+                // ── STEP 3: Handle disconnections ──
                 if (connection === 'close') {
                     const statusCode = new Boom(lastDisconnect?.error)?.output?.statusCode;
                     const errMsg = lastDisconnect?.error?.message || 'Unknown';
                     logErr('🔴', 'DISCONNECTED', `Code: ${statusCode} — ${errMsg}`);
 
                     if (statusCode === DisconnectReason.restartRequired) {
-                        // ✅ This is the key fix — after pairing WA sends 515 restartRequired
-                        // We must create a NEW socket with the saved creds to complete login
-                        logWarn('🔁', 'RECONNECT', 'Restart required after pairing — reconnecting to establish session...');
+                        // ✅ Normal after pairing — WA forces a reconnect to finalise session
+                        // We restart the socket (NOT the whole flow) — pairingCodeSent stays true
+                        // so we don't try to pair again, we just reconnect and wait for 'open'
+                        logWarn('🔁', 'RECONNECT', 'Restart required — reconnecting to finalise session...');
                         await delay(2000);
-                        createSocket(false).catch(err => logErr('❌', 'RECONNECT ERROR', err.message));
+                        startSocket().catch(err => logErr('❌', 'RECONNECT ERROR', err.message));
 
                     } else if (statusCode === DisconnectReason.loggedOut) {
                         logWarn('🚪', 'DISCONNECT', 'Logged out. Clearing auth...');
@@ -232,7 +230,7 @@ router.get('/', async (req, res) => {
                         logWarn('🔀', 'DISCONNECT', 'Replaced by another session.');
 
                     } else if (statusCode === DisconnectReason.timedOut) {
-                        logWarn('⏰', 'DISCONNECT', 'Timed out.');
+                        logWarn('⏰', 'DISCONNECT', 'Timed out — no response from WhatsApp.');
 
                     } else if (statusCode === DisconnectReason.connectionClosed) {
                         logWarn('🔌', 'DISCONNECT', 'WA closed the connection.');
@@ -241,7 +239,7 @@ router.get('/', async (req, res) => {
                         logWarn('📡', 'DISCONNECT', 'Lost connection to WA servers.');
 
                     } else {
-                        logWarn('⚠️ ', 'DISCONNECT', `Unknown reason (${statusCode}). Restarting pm2 in 5s...`);
+                        logWarn('⚠️ ', 'DISCONNECT', `Unknown (${statusCode}). Restarting pm2 in 5s...`);
                         await delay(5000);
                         exec('pm2 restart qasim');
                     }
@@ -249,8 +247,7 @@ router.get('/', async (req, res) => {
             });
         }
 
-        // Start with pairing phase
-        await createSocket(true);
+        await startSocket();
 
     } catch (err) {
         logErr('💥', 'FATAL', err.message);
