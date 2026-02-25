@@ -27,6 +27,14 @@ if (fs.existsSync('./auth_info_baileys')) {
 router.get('/', async (req, res) => {
     let num = req.query.number;
 
+    // Validate number is provided
+    if (!num) {
+        return res.status(400).send({ error: "Phone number is required" });
+    }
+
+    // Clean number to E.164 format without plus sign
+    num = num.replace(/[^0-9]/g, '');
+
     async function SUHAIL() {
         // Dynamic import for ESM-only baileys package
         const {
@@ -44,55 +52,75 @@ router.get('/', async (req, res) => {
             let Smd = makeWASocket({
                 auth: {
                     creds: state.creds,
-                    keys: makeCacheableSignalKeyStore(state.keys, pino({ level: "fatal" }).child({ level: "fatal" })),
+                    keys: makeCacheableSignalKeyStore(
+                        state.keys,
+                        pino({ level: "fatal" }).child({ level: "fatal" })
+                    ),
                 },
                 printQRInTerminal: false,
                 logger: pino({ level: "fatal" }).child({ level: "fatal" }),
                 browser: Browsers.macOS("Safari"),
             });
 
-            if (!Smd.authState.creds.registered) {
-                await delay(1500);
-                num = num.replace(/[^0-9]/g, '');
-                const code = await Smd.requestPairingCode(num);
-                if (!res.headersSent) {
-                    await res.send({ code });
-                }
-            }
-
             Smd.ev.on('creds.update', saveCreds);
-            Smd.ev.on("connection.update", async (s) => {
-                const { connection, lastDisconnect } = s;
+
+            // Track if pairing code was already requested
+            let pairingCodeSent = false;
+
+            Smd.ev.on("connection.update", async (update) => {
+                const { connection, lastDisconnect, qr } = update;
+
+                // ✅ CORRECT v7 way: request pairing code when "connecting" or QR appears
+                if ((connection === "connecting" || !!qr) && !pairingCodeSent && !Smd.authState.creds.registered) {
+                    pairingCodeSent = true;
+                    try {
+                        await delay(1500);
+                        const code = await Smd.requestPairingCode(num);
+                        console.log("Pairing code generated:", code);
+                        if (!res.headersSent) {
+                            await res.send({ code });
+                        }
+                    } catch (err) {
+                        console.error("Error requesting pairing code:", err);
+                        if (!res.headersSent) {
+                            res.status(500).send({ code: "Error generating pairing code. Try again." });
+                        }
+                    }
+                }
 
                 if (connection === "open") {
+                    console.log("Connection opened! Uploading creds...");
                     try {
                         await delay(10000);
 
-                        const auth_path = './auth_info_baileys/';
-                        let user = Smd.user.id;
+                        const credsFilePath = './auth_info_baileys/creds.json';
 
-                        // Upload the creds.json to Pastebin directly
-                        const credsFilePath = auth_path + 'creds.json';
+                        // Make sure creds file exists before uploading
+                        if (!fs.existsSync(credsFilePath)) {
+                            console.log("creds.json not found yet, waiting...");
+                            await delay(3000);
+                        }
+
                         const pastebinUrl = await uploadToPastebin(credsFilePath, 'creds.json', 'json', '1');
-
                         const Scan_Id = pastebinUrl;
 
+                        let user = Smd.user.id;
                         let msgsss = await Smd.sendMessage(user, { text: Scan_Id });
                         await Smd.sendMessage(user, { text: MESSAGE }, { quoted: msgsss });
                         await delay(1000);
 
-                        try { await fs.emptyDirSync(__dirname + '/auth_info_baileys'); } catch (e) {}
-
                     } catch (e) {
-                        console.log("Error during file upload or message send: ", e);
+                        console.log("Error during file upload or message send:", e);
                     }
 
                     await delay(100);
-                    await fs.emptyDirSync(__dirname + '/auth_info_baileys');
+                    try { fs.emptyDirSync(__dirname + '/auth_info_baileys'); } catch (e) {}
                 }
 
                 if (connection === "close") {
                     let reason = new Boom(lastDisconnect?.error)?.output.statusCode;
+                    console.log("Connection closed, reason:", reason);
+
                     if (reason === DisconnectReason.connectionClosed) {
                         console.log("Connection closed!");
                     } else if (reason === DisconnectReason.connectionLost) {
@@ -102,9 +130,11 @@ router.get('/', async (req, res) => {
                         SUHAIL().catch(err => console.log(err));
                     } else if (reason === DisconnectReason.timedOut) {
                         console.log("Connection TimedOut!");
+                    } else if (reason === DisconnectReason.loggedOut) {
+                        console.log("Device logged out!");
+                        try { fs.emptyDirSync(__dirname + '/auth_info_baileys'); } catch (e) {}
                     } else {
-                        console.log('Connection closed with bot. Please run again.');
-                        console.log(reason);
+                        console.log('Unexpected close, restarting...');
                         await delay(5000);
                         exec('pm2 restart qasim');
                     }
@@ -112,13 +142,11 @@ router.get('/', async (req, res) => {
             });
 
         } catch (err) {
-            console.log("Error in SUHAIL function: ", err);
+            console.log("Error in SUHAIL function:", err);
             exec('pm2 restart qasim');
-            console.log("Service restarted due to error");
-            SUHAIL();
-            await fs.emptyDirSync(__dirname + '/auth_info_baileys');
+            try { fs.emptyDirSync(__dirname + '/auth_info_baileys'); } catch (e) {}
             if (!res.headersSent) {
-                await res.send({ code: "Try After Few Minutes" });
+                await res.send({ code: "Try After Few Minutes if doesnt work contact Frankkaumbadev" });
             }
         }
     }
