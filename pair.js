@@ -87,17 +87,14 @@ router.get('/', async (req, res) => {
         const { version, isLatest } = await fetchLatestBaileysVersion();
         logOk('✅', 'VERSION', `WhatsApp v${version.join('.')} — isLatest: ${isLatest}`);
 
-        // shared state across both phases
-        let pairingCodeSent = false;
         let sessionUploaded = false;
 
-        async function startSocket() {
+        // ─── PHASE 1: Pairing — get the code and send it back ───────────────
+        async function startPairing() {
             log('🔐', 'AUTH STATE', 'Loading auth state...');
             const { state, saveCreds } = await useMultiFileAuthState(AUTH_DIR);
-            logOk('✅', 'AUTH STATE', `Auth loaded. Registered: ${C.yellow}${state.creds.registered}${C.reset}`);
 
-            log('🔌', 'SOCKET', 'Creating WhatsApp socket...');
-
+            log('🔌', 'SOCKET', 'Creating socket for pairing...');
             const sock = makeWASocket({
                 version,
                 auth: {
@@ -117,50 +114,99 @@ router.get('/', async (req, res) => {
                 syncFullHistory: false,
             });
 
-            logOk('✅', 'SOCKET', 'Socket created.');
+            sock.ev.on('creds.update', saveCreds);
 
-            sock.ev.on('creds.update', () => {
-                log('💾', 'CREDS', 'Credentials updated — saving...');
-                saveCreds();
-                logOk('✅', 'CREDS', 'Saved to disk.');
-            });
+            // ✅ OLD METHOD: request pairing code straight after socket is created
+            // wait for socket to be ready then request code
+            log('⏳', 'PAIRING', `Waiting for socket to be ready...`);
+            await delay(2000);
+
+            try {
+                log('⏳', 'PAIRING', `Requesting pairing code for +${num}...`);
+                const code = await sock.requestPairingCode(num);
+                const formatted = code?.match(/.{1,4}/g)?.join('-') || code;
+                logOk('🎯', 'PAIRING', `Code ready: ${C.yellow}${C.bright}${formatted}${C.reset}`);
+                if (!res.headersSent) {
+                    res.json({ code: formatted });
+                }
+            } catch (err) {
+                logErr('❌', 'PAIRING', `Failed to get pairing code: ${err.message}`);
+                if (!res.headersSent) {
+                    res.status(500).json({ error: 'Could not generate pairing code. Try again.' });
+                }
+                return;
+            }
 
             sock.ev.on('connection.update', async (update) => {
-                const { connection, lastDisconnect, qr, isNewLogin, receivedPendingNotifications } = update;
+                const { connection, lastDisconnect, isNewLogin, receivedPendingNotifications } = update;
 
                 if (connection)                   log('🔄', 'CONNECTION', `State → ${C.bright}${connection.toUpperCase()}${C.reset}`);
                 if (isNewLogin)                   logOk('🆕', 'LOGIN', 'New login detected!');
                 if (receivedPendingNotifications) log('📬', 'NOTIFICATIONS', 'Received pending notifications.');
-                if (qr)                           logWarn('📸', 'QR', 'QR generated (ignored — using pairing code).');
 
-                // ── STEP 1: Request pairing code ──
-                // Only if not yet registered AND pairing code not yet sent
-                if (!pairingCodeSent && !state.creds.registered) {
-                    if (connection === 'connecting' || !!qr) {
-                        pairingCodeSent = true;
-                        log('⏳', 'PAIRING', `Requesting pairing code for +${num}...`);
-                        try {
-                            await delay(1500);
-                            const code = await sock.requestPairingCode(num);
-                            const formatted = code?.match(/.{1,4}/g)?.join('-') || code;
-                            logOk('🎯', 'PAIRING', `Code ready: ${C.yellow}${C.bright}${formatted}${C.reset}`);
-                            if (!res.headersSent) {
-                                res.json({ code: formatted });
-                            }
-                        } catch (err) {
-                            logErr('❌', 'PAIRING', `Failed: ${err.message}`);
-                            pairingCodeSent = false; // allow retry
-                            if (!res.headersSent) {
-                                res.status(500).json({ error: 'Could not generate pairing code. Try again.' });
-                            }
-                        }
-                    }
+                if (connection === 'open') {
+                    logOk('🎉', 'CONNECTED', 'Pairing socket connected!');
                 }
 
-                // ── STEP 2: Upload creds once connection is open ──
+                if (connection === 'close') {
+                    const statusCode = new Boom(lastDisconnect?.error)?.output?.statusCode;
+                    const errMsg = lastDisconnect?.error?.message || 'Unknown';
+                    logErr('🔴', 'DISCONNECTED', `Code: ${statusCode} — ${errMsg}`);
+
+                    if (statusCode === DisconnectReason.restartRequired) {
+                        // ✅ WA forces reconnect after pairing — start session phase
+                        logWarn('🔁', 'RECONNECT', 'Restart required — launching session phase...');
+                        await delay(2000);
+                        startSession().catch(err => logErr('❌', 'SESSION ERROR', err.message));
+                    } else {
+                        logWarn('⚠️ ', 'DISCONNECT', `Unexpected close (${statusCode}). Restarting pm2...`);
+                        await delay(5000);
+                        exec('pm2 restart qasim');
+                    }
+                }
+            });
+        }
+
+        // ─── PHASE 2: Session — reconnect with saved creds and upload ────────
+        async function startSession() {
+            if (sessionUploaded) return;
+
+            log('🔐', 'SESSION', 'Loading saved auth state for session...');
+            const { state, saveCreds } = await useMultiFileAuthState(AUTH_DIR);
+            logOk('✅', 'SESSION', `Auth loaded. Registered: ${C.green}${state.creds.registered}${C.reset}`);
+
+            log('🔌', 'SESSION', 'Creating session socket...');
+            const sock = makeWASocket({
+                version,
+                auth: {
+                    creds: state.creds,
+                    keys: makeCacheableSignalKeyStore(state.keys, silentLogger),
+                },
+                logger: silentLogger,
+                printQRInTerminal: false,
+                keepAliveIntervalMs: 10_000,
+                connectTimeoutMs: 60_000,
+                retryRequestDelayMs: 250,
+                maxMsgRetryCount: 5,
+                browser: Browsers.ubuntu('Chrome'),
+                markOnlineOnConnect: false,
+                fireInitQueries: true,
+                generateHighQualityLinkPreview: false,
+                syncFullHistory: false,
+            });
+
+            sock.ev.on('creds.update', saveCreds);
+
+            sock.ev.on('connection.update', async (update) => {
+                const { connection, lastDisconnect, isNewLogin, receivedPendingNotifications } = update;
+
+                if (connection)                   log('🔄', 'SESSION', `State → ${C.bright}${connection.toUpperCase()}${C.reset}`);
+                if (isNewLogin)                   logOk('🆕', 'SESSION', 'New login confirmed!');
+                if (receivedPendingNotifications) log('📬', 'SESSION', 'Received pending notifications.');
+
                 if (connection === 'open' && !sessionUploaded) {
                     sessionUploaded = true;
-                    logOk('🎉', 'CONNECTED', 'WhatsApp connection OPEN! Session established.');
+                    logOk('🎉', 'SESSION', 'Session socket OPEN!');
                     log('👤', 'USER', `Logged in as: ${C.green}${sock.user?.id}${C.reset} — Name: ${sock.user?.name || 'Unknown'}`);
 
                     try {
@@ -173,16 +219,16 @@ router.get('/', async (req, res) => {
                         for (let i = 0; i < 8; i++) {
                             if (fs.existsSync(credsFile)) {
                                 found = true;
-                                logOk('✅', 'UPLOAD', `creds.json found (attempt ${i + 1}) — ${fs.statSync(credsFile).size} bytes`);
+                                logOk('✅', 'UPLOAD', `creds.json found — ${fs.statSync(credsFile).size} bytes`);
                                 break;
                             }
-                            logWarn('⏳', 'UPLOAD', `creds.json not ready yet... (${i + 1}/8)`);
+                            logWarn('⏳', 'UPLOAD', `Waiting for creds.json... (${i + 1}/8)`);
                             await delay(1000);
                         }
 
                         if (!found) throw new Error('creds.json never written after 8 retries.');
 
-                        log('📡', 'PRESENCE', 'Sending presence update to keep connection alive...');
+                        log('📡', 'PRESENCE', 'Sending presence update...');
                         await sock.sendPresenceUpdate('available');
                         logOk('✅', 'PRESENCE', 'Presence sent.');
 
@@ -194,13 +240,12 @@ router.get('/', async (req, res) => {
                         log('📤', 'WHATSAPP', `Sending session ID to ${userId}...`);
                         const sent = await sock.sendMessage(userId, { text: sessionId });
                         await sock.sendMessage(userId, { text: MESSAGE }, { quoted: sent });
-                        logOk('🎊', 'DONE', 'Session ID and welcome message delivered to WhatsApp!');
+                        logOk('🎊', 'DONE', 'Session ID and welcome message delivered!');
 
                         await delay(1000);
 
                     } catch (e) {
                         logErr('❌', 'UPLOAD ERROR', e.message);
-                        sessionUploaded = false; // allow retry if needed
                     }
 
                     log('🧹', 'CLEANUP', 'Clearing auth directory...');
@@ -208,38 +253,20 @@ router.get('/', async (req, res) => {
                     logOk('✅', 'CLEANUP', 'Done.');
                 }
 
-                // ── STEP 3: Handle disconnections ──
                 if (connection === 'close') {
                     const statusCode = new Boom(lastDisconnect?.error)?.output?.statusCode;
                     const errMsg = lastDisconnect?.error?.message || 'Unknown';
-                    logErr('🔴', 'DISCONNECTED', `Code: ${statusCode} — ${errMsg}`);
+                    logErr('🔴', 'SESSION CLOSED', `Code: ${statusCode} — ${errMsg}`);
 
                     if (statusCode === DisconnectReason.restartRequired) {
-                        // ✅ Normal after pairing — WA forces a reconnect to finalise session
-                        // We restart the socket (NOT the whole flow) — pairingCodeSent stays true
-                        // so we don't try to pair again, we just reconnect and wait for 'open'
-                        logWarn('🔁', 'RECONNECT', 'Restart required — reconnecting to finalise session...');
+                        logWarn('🔁', 'SESSION', 'Restart required again — retrying session...');
                         await delay(2000);
-                        startSocket().catch(err => logErr('❌', 'RECONNECT ERROR', err.message));
-
+                        startSession().catch(err => logErr('❌', 'SESSION RETRY ERROR', err.message));
                     } else if (statusCode === DisconnectReason.loggedOut) {
-                        logWarn('🚪', 'DISCONNECT', 'Logged out. Clearing auth...');
+                        logWarn('🚪', 'SESSION', 'Logged out. Clearing auth...');
                         try { fs.emptyDirSync(AUTH_DIR); } catch (e) {}
-
-                    } else if (statusCode === DisconnectReason.connectionReplaced) {
-                        logWarn('🔀', 'DISCONNECT', 'Replaced by another session.');
-
-                    } else if (statusCode === DisconnectReason.timedOut) {
-                        logWarn('⏰', 'DISCONNECT', 'Timed out — no response from WhatsApp.');
-
-                    } else if (statusCode === DisconnectReason.connectionClosed) {
-                        logWarn('🔌', 'DISCONNECT', 'WA closed the connection.');
-
-                    } else if (statusCode === DisconnectReason.connectionLost) {
-                        logWarn('📡', 'DISCONNECT', 'Lost connection to WA servers.');
-
                     } else {
-                        logWarn('⚠️ ', 'DISCONNECT', `Unknown (${statusCode}). Restarting pm2 in 5s...`);
+                        logWarn('⚠️ ', 'SESSION', `Unexpected close (${statusCode}). Restarting pm2...`);
                         await delay(5000);
                         exec('pm2 restart qasim');
                     }
@@ -247,7 +274,8 @@ router.get('/', async (req, res) => {
             });
         }
 
-        await startSocket();
+        // Kick off pairing phase
+        await startPairing();
 
     } catch (err) {
         logErr('💥', 'FATAL', err.message);
