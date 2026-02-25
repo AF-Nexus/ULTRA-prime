@@ -31,21 +31,14 @@ const C = {
     yellow: '\x1b[33m',
     red:    '\x1b[31m',
     blue:   '\x1b[34m',
-    gray:   '\x1b[90m',
 };
 
-function log(emoji, label, msg) {
-    const time = new Date().toLocaleTimeString('en-GB', { hour12: false });
-    const tag = `${C.cyan}[${time}]${C.reset}`;
-    const lbl = `${C.bright}${C.blue}${label}${C.reset}`;
-    console.log(`${tag} ${emoji}  ${lbl}: ${msg}`);
-}
+function ts() { return new Date().toLocaleTimeString('en-GB', { hour12: false }); }
+function log(e, l, m)     { console.log(`${C.cyan}[${ts()}]${C.reset} ${e}  ${C.bright}${C.blue}${l}${C.reset}: ${m}`); }
+function logOk(e, l, m)   { console.log(`${C.cyan}[${ts()}]${C.reset} ${e}  ${C.bright}${C.green}${l}${C.reset}: ${m}`); }
+function logWarn(e, l, m) { console.log(`${C.cyan}[${ts()}]${C.reset} ${e}  ${C.bright}${C.yellow}${l}${C.reset}: ${m}`); }
+function logErr(e, l, m)  { console.log(`${C.cyan}[${ts()}]${C.reset} ${e}  ${C.bright}${C.red}${l}${C.reset}: ${m}`); }
 
-function logOk(emoji, label, msg)    { const time = new Date().toLocaleTimeString('en-GB', { hour12: false }); console.log(`${C.cyan}[${time}]${C.reset} ${emoji}  ${C.bright}${C.green}${label}${C.reset}: ${msg}`); }
-function logWarn(emoji, label, msg)  { const time = new Date().toLocaleTimeString('en-GB', { hour12: false }); console.log(`${C.cyan}[${time}]${C.reset} ${emoji}  ${C.bright}${C.yellow}${label}${C.reset}: ${msg}`); }
-function logErr(emoji, label, msg)   { const time = new Date().toLocaleTimeString('en-GB', { hour12: false }); console.log(`${C.cyan}[${time}]${C.reset} ${emoji}  ${C.bright}${C.red}${label}${C.reset}: ${msg}`); }
-
-// Silent pino logger — only used internally by baileys, we handle our own logs
 const silentLogger = pino({ level: 'silent' });
 
 router.get('/', async (req, res) => {
@@ -73,11 +66,11 @@ router.get('/', async (req, res) => {
         }
         logOk('✅', 'AUTH DIR', 'Auth directory ready.');
     } catch (e) {
-        logErr('❌', 'AUTH DIR', `Failed to clean auth dir: ${e.message}`);
+        logErr('❌', 'AUTH DIR', `Failed: ${e.message}`);
     }
 
     try {
-        log('📦', 'BAILEYS', 'Loading @whiskeysockets/baileys (ESM dynamic import)...');
+        log('📦', 'BAILEYS', 'Loading @whiskeysockets/baileys...');
 
         const {
             default: makeWASocket,
@@ -95,150 +88,169 @@ router.get('/', async (req, res) => {
         const { version, isLatest } = await fetchLatestBaileysVersion();
         logOk('✅', 'VERSION', `WhatsApp v${version.join('.')} — isLatest: ${isLatest}`);
 
-        log('🔐', 'AUTH STATE', 'Loading auth state from disk...');
-        const { state, saveCreds } = await useMultiFileAuthState(AUTH_DIR);
-        logOk('✅', 'AUTH STATE', `Auth loaded. Already registered: ${state.creds.registered}`);
+        // ─── This function creates a socket and handles the full lifecycle ───
+        // It is called once for pairing, then again after restartRequired
+        // to establish the real authenticated session and upload creds.
+        async function createSocket(isPairingPhase) {
+            log('🔐', 'AUTH STATE', 'Loading auth state...');
+            const { state, saveCreds } = await useMultiFileAuthState(AUTH_DIR);
+            logOk('✅', 'AUTH STATE', `Auth loaded. Registered: ${state.creds.registered}`);
 
-        log('🔌', 'SOCKET', 'Creating WhatsApp socket connection...');
+            log('🔌', 'SOCKET', `Creating socket — phase: ${isPairingPhase ? 'PAIRING' : 'SESSION'}...`);
 
-        const sock = makeWASocket({
-            version,
-            auth: {
-                creds: state.creds,
-                keys: makeCacheableSignalKeyStore(state.keys, silentLogger),
-            },
-            logger: silentLogger,
-            printQRInTerminal: false,
-            keepAliveIntervalMs: 10_000,
-            connectTimeoutMs: 60_000,
-            retryRequestDelayMs: 250,
-            maxMsgRetryCount: 5,
-            browser: Browsers.ubuntu('Chrome'),
-            markOnlineOnConnect: false,
-            fireInitQueries: true,
-            generateHighQualityLinkPreview: false,
-            syncFullHistory: false,
-        });
+            const sock = makeWASocket({
+                version,
+                auth: {
+                    creds: state.creds,
+                    keys: makeCacheableSignalKeyStore(state.keys, silentLogger),
+                },
+                logger: silentLogger,
+                printQRInTerminal: false,
+                keepAliveIntervalMs: 10_000,
+                connectTimeoutMs: 60_000,
+                retryRequestDelayMs: 250,
+                maxMsgRetryCount: 5,
+                browser: Browsers.ubuntu('Chrome'),
+                markOnlineOnConnect: false,
+                fireInitQueries: true,
+                generateHighQualityLinkPreview: false,
+                syncFullHistory: false,
+            });
 
-        logOk('✅', 'SOCKET', 'Socket created. Listening for connection events...');
+            logOk('✅', 'SOCKET', 'Socket created. Listening for events...');
 
-        sock.ev.on('creds.update', () => {
-            log('💾', 'CREDS', 'Credentials updated — saving...');
-            saveCreds();
-            logOk('✅', 'CREDS', 'Credentials saved to disk.');
-        });
+            sock.ev.on('creds.update', () => {
+                log('💾', 'CREDS', 'Credentials updated — saving...');
+                saveCreds();
+                logOk('✅', 'CREDS', 'Credentials saved to disk.');
+            });
 
-        let pairingCodeSent = false;
+            let pairingCodeSent = false;
 
-        sock.ev.on('connection.update', async (update) => {
-            const { connection, lastDisconnect, qr, receivedPendingNotifications, isNewLogin } = update;
+            sock.ev.on('connection.update', async (update) => {
+                const { connection, lastDisconnect, qr, isNewLogin, receivedPendingNotifications } = update;
 
-            if (connection) {
-                log('🔄', 'CONNECTION', `State → ${C.bright}${connection.toUpperCase()}${C.reset}`);
-            }
+                if (connection) log('🔄', 'CONNECTION', `State → ${C.bright}${connection.toUpperCase()}${C.reset}`);
+                if (isNewLogin)                   logOk('🆕', 'LOGIN', 'New login detected!');
+                if (receivedPendingNotifications) log('📬', 'NOTIFICATIONS', 'Received pending notifications.');
+                if (qr)                           logWarn('📸', 'QR', 'QR generated (ignored — using pairing code).');
 
-            if (isNewLogin)                    logOk('🆕', 'LOGIN', 'New login detected!');
-            if (receivedPendingNotifications)  log('📬', 'NOTIFICATIONS', 'Received pending WhatsApp notifications.');
-            if (qr)                            logWarn('📸', 'QR', 'QR generated (ignored — using pairing code).');
-
-            // ✅ Request pairing code on connecting or QR
-            if (!pairingCodeSent && !sock.authState.creds.registered) {
-                if (connection === 'connecting' || !!qr) {
-                    pairingCodeSent = true;
-                    log('⏳', 'PAIRING', `Requesting pairing code for +${num}...`);
-                    try {
-                        await delay(1500);
-                        const code = await sock.requestPairingCode(num);
-                        const formatted = code?.match(/.{1,4}/g)?.join('-') || code;
-                        logOk('🎯', 'PAIRING', `Code ready: ${C.yellow}${C.bright}${formatted}${C.reset}`);
-                        if (!res.headersSent) {
-                            res.json({ code: formatted });
-                        }
-                    } catch (err) {
-                        logErr('❌', 'PAIRING', `Failed: ${err.message}`);
-                        pairingCodeSent = false;
-                        if (!res.headersSent) {
-                            res.status(500).json({ error: 'Could not generate pairing code. Try again.' });
+                // ── PHASE 1: Send pairing code (only during pairing phase) ──
+                if (isPairingPhase && !pairingCodeSent && !sock.authState.creds.registered) {
+                    if (connection === 'connecting' || !!qr) {
+                        pairingCodeSent = true;
+                        log('⏳', 'PAIRING', `Requesting pairing code for +${num}...`);
+                        try {
+                            await delay(1500);
+                            const code = await sock.requestPairingCode(num);
+                            const formatted = code?.match(/.{1,4}/g)?.join('-') || code;
+                            logOk('🎯', 'PAIRING', `Code ready: ${C.yellow}${C.bright}${formatted}${C.reset}`);
+                            if (!res.headersSent) {
+                                res.json({ code: formatted });
+                            }
+                        } catch (err) {
+                            logErr('❌', 'PAIRING', `Failed: ${err.message}`);
+                            pairingCodeSent = false;
+                            if (!res.headersSent) {
+                                res.status(500).json({ error: 'Could not generate pairing code. Try again.' });
+                            }
                         }
                     }
                 }
-            }
 
-            // ✅ Connection open — upload creds
-            if (connection === 'open') {
-                logOk('🎉', 'CONNECTED', 'WhatsApp connection OPEN! Session established.');
-                log('👤', 'USER', `Logged in as: ${C.green}${sock.user?.id}${C.reset} — Name: ${sock.user?.name || 'Unknown'}`);
+                // ── PHASE 2: Upload creds after real session is open ──
+                if (connection === 'open') {
+                    logOk('🎉', 'CONNECTED', 'WhatsApp connection OPEN! Session established.');
+                    log('👤', 'USER', `Logged in as: ${C.green}${sock.user?.id}${C.reset} — Name: ${sock.user?.name || 'Unknown'}`);
 
-                try {
-                    log('⏳', 'UPLOAD', 'Waiting 3s for creds to finish writing to disk...');
-                    await delay(3000);
+                    // Only upload on the session phase (after restart), not during pairing phase
+                    // But if creds are registered it means this is already the real session
+                    if (!isPairingPhase || sock.authState.creds.registered) {
+                        try {
+                            log('⏳', 'UPLOAD', 'Waiting 3s for creds to finish writing...');
+                            await delay(3000);
 
-                    const credsFile = path.join(AUTH_DIR, 'creds.json');
+                            const credsFile = path.join(AUTH_DIR, 'creds.json');
+                            let found = false;
 
-                    let found = false;
-                    for (let i = 0; i < 8; i++) {
-                        if (fs.existsSync(credsFile)) {
-                            found = true;
-                            logOk('✅', 'UPLOAD', `creds.json found (attempt ${i + 1}) — size: ${fs.statSync(credsFile).size} bytes`);
-                            break;
+                            for (let i = 0; i < 8; i++) {
+                                if (fs.existsSync(credsFile)) {
+                                    found = true;
+                                    logOk('✅', 'UPLOAD', `creds.json found (attempt ${i + 1}) — ${fs.statSync(credsFile).size} bytes`);
+                                    break;
+                                }
+                                logWarn('⏳', 'UPLOAD', `creds.json not ready... (${i + 1}/8)`);
+                                await delay(1000);
+                            }
+
+                            if (!found) throw new Error('creds.json never written after 8 retries.');
+
+                            log('📡', 'PRESENCE', 'Sending presence update...');
+                            await sock.sendPresenceUpdate('available');
+                            logOk('✅', 'PRESENCE', 'Presence sent.');
+
+                            log('🚀', 'PASTEBIN', 'Uploading creds.json to Pastebin...');
+                            const sessionId = await uploadToPastebin(credsFile, 'creds.json', 'json', '1');
+                            logOk('✅', 'PASTEBIN', `Done! Session ID: ${C.green}${C.bright}${sessionId}${C.reset}`);
+
+                            const userId = sock.user.id;
+                            log('📤', 'WHATSAPP', `Sending session ID to ${userId}...`);
+                            const sent = await sock.sendMessage(userId, { text: sessionId });
+                            await sock.sendMessage(userId, { text: MESSAGE }, { quoted: sent });
+                            logOk('🎊', 'DONE', 'Session ID and welcome message delivered!');
+
+                            await delay(1000);
+
+                        } catch (e) {
+                            logErr('❌', 'UPLOAD ERROR', e.message);
                         }
-                        logWarn('⏳', 'UPLOAD', `creds.json not ready yet... (${i + 1}/8)`);
-                        await delay(1000);
+
+                        log('🧹', 'CLEANUP', 'Clearing auth directory...');
+                        try { fs.emptyDirSync(AUTH_DIR); } catch (e) {}
+                        logOk('✅', 'CLEANUP', 'Done.');
                     }
-
-                    if (!found) throw new Error('creds.json was never written after 8 retries.');
-
-                    log('📡', 'PRESENCE', 'Sending presence update to keep connection alive...');
-                    await sock.sendPresenceUpdate('available');
-                    logOk('✅', 'PRESENCE', 'Presence sent.');
-
-                    log('🚀', 'PASTEBIN', 'Uploading creds.json to Pastebin...');
-                    const sessionId = await uploadToPastebin(credsFile, 'creds.json', 'json', '1');
-                    logOk('✅', 'PASTEBIN', `Upload done! Session ID: ${C.green}${C.bright}${sessionId}${C.reset}`);
-
-                    const userId = sock.user.id;
-                    log('📤', 'WHATSAPP', `Sending session ID message to ${userId}...`);
-                    const sent = await sock.sendMessage(userId, { text: sessionId });
-                    await sock.sendMessage(userId, { text: MESSAGE }, { quoted: sent });
-                    logOk('🎊', 'DONE', 'Session ID and welcome message delivered to WhatsApp!');
-
-                    await delay(1000);
-
-                } catch (e) {
-                    logErr('❌', 'UPLOAD ERROR', e.message);
                 }
 
-                log('🧹', 'CLEANUP', 'Clearing auth directory...');
-                try { fs.emptyDirSync(AUTH_DIR); } catch (e) {}
-                logOk('✅', 'CLEANUP', 'Auth directory cleared.');
-            }
+                // ── Handle disconnections ──
+                if (connection === 'close') {
+                    const statusCode = new Boom(lastDisconnect?.error)?.output?.statusCode;
+                    const errMsg = lastDisconnect?.error?.message || 'Unknown';
+                    logErr('🔴', 'DISCONNECTED', `Code: ${statusCode} — ${errMsg}`);
 
-            // ✅ Connection closed
-            if (connection === 'close') {
-                const statusCode = new Boom(lastDisconnect?.error)?.output?.statusCode;
-                const errMsg = lastDisconnect?.error?.message || 'Unknown error';
-                logErr('🔴', 'DISCONNECTED', `Connection closed — Code: ${statusCode} — ${errMsg}`);
+                    if (statusCode === DisconnectReason.restartRequired) {
+                        // ✅ This is the key fix — after pairing WA sends 515 restartRequired
+                        // We must create a NEW socket with the saved creds to complete login
+                        logWarn('🔁', 'RECONNECT', 'Restart required after pairing — reconnecting to establish session...');
+                        await delay(2000);
+                        createSocket(false).catch(err => logErr('❌', 'RECONNECT ERROR', err.message));
 
-                if (statusCode === DisconnectReason.loggedOut) {
-                    logWarn('🚪', 'DISCONNECT', 'Reason: Logged out. Clearing auth...');
-                    try { fs.emptyDirSync(AUTH_DIR); } catch (e) {}
-                } else if (statusCode === DisconnectReason.restartRequired) {
-                    logWarn('🔁', 'DISCONNECT', 'Reason: Restart required (normal after pairing).');
-                } else if (statusCode === DisconnectReason.connectionReplaced) {
-                    logWarn('🔀', 'DISCONNECT', 'Reason: Replaced by another session.');
-                } else if (statusCode === DisconnectReason.timedOut) {
-                    logWarn('⏰', 'DISCONNECT', 'Reason: Timed out — no response from WhatsApp.');
-                } else if (statusCode === DisconnectReason.connectionClosed) {
-                    logWarn('🔌', 'DISCONNECT', 'Reason: WhatsApp closed the connection.');
-                } else if (statusCode === DisconnectReason.connectionLost) {
-                    logWarn('📡', 'DISCONNECT', 'Reason: Connection to WA servers lost.');
-                } else {
-                    logWarn('⚠️ ', 'DISCONNECT', `Unknown reason (${statusCode}). Restarting pm2 in 5s...`);
-                    await delay(5000);
-                    exec('pm2 restart qasim');
+                    } else if (statusCode === DisconnectReason.loggedOut) {
+                        logWarn('🚪', 'DISCONNECT', 'Logged out. Clearing auth...');
+                        try { fs.emptyDirSync(AUTH_DIR); } catch (e) {}
+
+                    } else if (statusCode === DisconnectReason.connectionReplaced) {
+                        logWarn('🔀', 'DISCONNECT', 'Replaced by another session.');
+
+                    } else if (statusCode === DisconnectReason.timedOut) {
+                        logWarn('⏰', 'DISCONNECT', 'Timed out.');
+
+                    } else if (statusCode === DisconnectReason.connectionClosed) {
+                        logWarn('🔌', 'DISCONNECT', 'WA closed the connection.');
+
+                    } else if (statusCode === DisconnectReason.connectionLost) {
+                        logWarn('📡', 'DISCONNECT', 'Lost connection to WA servers.');
+
+                    } else {
+                        logWarn('⚠️ ', 'DISCONNECT', `Unknown reason (${statusCode}). Restarting pm2 in 5s...`);
+                        await delay(5000);
+                        exec('pm2 restart qasim');
+                    }
                 }
-            }
-        });
+            });
+        }
+
+        // Start with pairing phase
+        await createSocket(true);
 
     } catch (err) {
         logErr('💥', 'FATAL', err.message);
