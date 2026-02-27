@@ -40,6 +40,11 @@ function logErr(e, l, m)  { console.log(`${C.cyan}[${ts()}]${C.reset} ${e}  ${C.
 
 const silentLogger = pino({ level: 'silent' });
 
+// Ensure auth dir is clean on startup
+if (fs.existsSync(AUTH_DIR)) {
+    fs.emptyDirSync(AUTH_DIR);
+}
+
 router.get('/', async (req, res) => {
     let num = req.query.number;
 
@@ -107,7 +112,7 @@ router.get('/', async (req, res) => {
                 connectTimeoutMs: 60_000,
                 retryRequestDelayMs: 250,
                 maxMsgRetryCount: 5,
-                browser: Browsers.ubuntu('Chrome'),
+                browser: Browsers.macOS('Safari'),
                 markOnlineOnConnect: false,
                 fireInitQueries: true,
                 generateHighQualityLinkPreview: false,
@@ -116,8 +121,6 @@ router.get('/', async (req, res) => {
 
             sock.ev.on('creds.update', saveCreds);
 
-            // ✅ OLD METHOD: request pairing code straight after socket is created
-            // wait for socket to be ready then request code
             log('⏳', 'PAIRING', `Waiting for socket to be ready...`);
             await delay(2000);
 
@@ -154,7 +157,6 @@ router.get('/', async (req, res) => {
                     logErr('🔴', 'DISCONNECTED', `Code: ${statusCode} — ${errMsg}`);
 
                     if (statusCode === DisconnectReason.restartRequired) {
-                        // ✅ WA forces reconnect after pairing — start session phase
                         logWarn('🔁', 'RECONNECT', 'Restart required — launching session phase...');
                         await delay(2000);
                         startSession().catch(err => logErr('❌', 'SESSION ERROR', err.message));
@@ -188,7 +190,7 @@ router.get('/', async (req, res) => {
                 connectTimeoutMs: 60_000,
                 retryRequestDelayMs: 250,
                 maxMsgRetryCount: 5,
-                browser: Browsers.ubuntu('Chrome'),
+                browser: Browsers.macOS('Safari'),
                 markOnlineOnConnect: false,
                 fireInitQueries: true,
                 generateHighQualityLinkPreview: false,
@@ -210,8 +212,8 @@ router.get('/', async (req, res) => {
                     log('👤', 'USER', `Logged in as: ${C.green}${sock.user?.id}${C.reset} — Name: ${sock.user?.name || 'Unknown'}`);
 
                     try {
-                        log('⏳', 'UPLOAD', 'Waiting 3s for creds to finish writing...');
-                        await delay(3000);
+                        log('⏳', 'UPLOAD', 'Waiting 10s for creds to finish writing...');
+                        await delay(10000);
 
                         const credsFile = path.join(AUTH_DIR, 'creds.json');
                         let found = false;
