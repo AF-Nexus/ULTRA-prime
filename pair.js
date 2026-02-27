@@ -13,12 +13,13 @@ const MESSAGE = process.env.MESSAGE || `
 
 ╭─❒ *🎉 SESSION INFO* ❒
 ├⬡ 🆔 Session ID successfully generated!
-├⬡ 🤖 Bot: EF-PRIME-MD-ULTRA V2
+├⬡ 🤖 Bot: EF-PRIME-MD-ULTRA
 ├⬡ 😎 Welcome to the next-gen experience!
 ╰────────────❒
 
 > ✅ Thank you for choosing *EF-PRIME-MD V2*!
-> 🔒 Your session is now active and secured`;
+> 🔒 Your session is now active and secured
+> Thank you for choosing EF-PRIME MD`;
 
 const AUTH_DIR = path.join(__dirname, 'auth_info_baileys');
 
@@ -38,7 +39,11 @@ function logOk(e, l, m)   { console.log(`${C.cyan}[${ts()}]${C.reset} ${e}  ${C.
 function logWarn(e, l, m) { console.log(`${C.cyan}[${ts()}]${C.reset} ${e}  ${C.bright}${C.yellow}${l}${C.reset}: ${m}`); }
 function logErr(e, l, m)  { console.log(`${C.cyan}[${ts()}]${C.reset} ${e}  ${C.bright}${C.red}${l}${C.reset}: ${m}`); }
 
+// ✅ FIX 1: Silent logger with child() override
+// Baileys internally calls logger.child({}) in many places.
+// Without this, those child instances use default pino level and leak debug logs.
 const silentLogger = pino({ level: 'silent' });
+silentLogger.child = () => silentLogger;
 
 // Ensure auth dir is clean on startup
 if (fs.existsSync(AUTH_DIR)) {
@@ -60,7 +65,7 @@ router.get('/', async (req, res) => {
 
     log('📞', 'PAIR REQUEST', `Incoming pairing request for +${num}`);
 
-    // Clean auth dir
+    // Clean auth dir per request
     try {
         if (fs.existsSync(AUTH_DIR)) {
             log('🗑️ ', 'AUTH DIR', 'Clearing old session files...');
@@ -76,6 +81,7 @@ router.get('/', async (req, res) => {
     try {
         log('📦', 'BAILEYS', 'Loading @whiskeysockets/baileys...');
 
+        // ✅ FIX 2: Baileys v7 is ESM-only. Must use dynamic import(), NOT require().
         const {
             default: makeWASocket,
             useMultiFileAuthState,
@@ -83,7 +89,8 @@ router.get('/', async (req, res) => {
             fetchLatestBaileysVersion,
             makeCacheableSignalKeyStore,
             Browsers,
-            DisconnectReason
+            DisconnectReason,
+            jidNormalizedUser,  // ✅ v7: strips device suffix from JIDs (e.g. 263712345678:5 → 263712345678@s.whatsapp.net)
         } = await import('@whiskeysockets/baileys');
 
         logOk('✅', 'BAILEYS', 'Module loaded.');
@@ -94,7 +101,7 @@ router.get('/', async (req, res) => {
 
         let sessionUploaded = false;
 
-        // ─── PHASE 1: Pairing — get the code and send it back ───────────────
+        // ─── PHASE 1: Pairing — request code and return it ──────────────────
         async function startPairing() {
             log('🔐', 'AUTH STATE', 'Loading auth state...');
             const { state, saveCreds } = await useMultiFileAuthState(AUTH_DIR);
@@ -121,7 +128,7 @@ router.get('/', async (req, res) => {
 
             sock.ev.on('creds.update', saveCreds);
 
-            log('⏳', 'PAIRING', `Waiting for socket to be ready...`);
+            log('⏳', 'PAIRING', 'Waiting for socket to be ready...');
             await delay(2000);
 
             try {
@@ -157,6 +164,7 @@ router.get('/', async (req, res) => {
                     logErr('🔴', 'DISCONNECTED', `Code: ${statusCode} — ${errMsg}`);
 
                     if (statusCode === DisconnectReason.restartRequired) {
+                        // WhatsApp forces a reconnect after pairing — move to session phase
                         logWarn('🔁', 'RECONNECT', 'Restart required — launching session phase...');
                         await delay(2000);
                         startSession().catch(err => logErr('❌', 'SESSION ERROR', err.message));
@@ -169,7 +177,7 @@ router.get('/', async (req, res) => {
             });
         }
 
-        // ─── PHASE 2: Session — reconnect with saved creds and upload ────────
+        // ─── PHASE 2: Session — reconnect with saved creds, upload, and DM ──
         async function startSession() {
             if (sessionUploaded) return;
 
@@ -238,10 +246,32 @@ router.get('/', async (req, res) => {
                         const sessionId = await uploadToPastebin(credsFile, 'creds.json', 'json', '1');
                         logOk('✅', 'PASTEBIN', `Done! Session ID: ${C.green}${C.bright}${sessionId}${C.reset}`);
 
-                        const userId = sock.user.id;
-                        log('📤', 'WHATSAPP', `Sending session ID to ${userId}...`);
-                        const sent = await sock.sendMessage(userId, { text: sessionId });
-                        await sock.sendMessage(userId, { text: MESSAGE }, { quoted: sent });
+                        // ✅ FIX 3: v7 LID system broke direct use of sock.user.id for sendMessage.
+                        // sock.user.id may now be a LID (e.g. 12345@lid) instead of a PN JID.
+                        // Sending to a LID directly causes messages to get stuck as PENDING.
+                        // Strategy:
+                        //   1. Try onWhatsApp() to resolve the real PN JID from the phone number.
+                        //   2. If that fails, fall back to jidNormalizedUser(sock.user.id)
+                        //      which at least strips the device suffix (:0, :5 etc).
+                        let sendJid;
+                        try {
+                            log('🔍', 'JID', `Resolving PN JID for +${num}...`);
+                            const [result] = await sock.onWhatsApp(`${num}@s.whatsapp.net`);
+                            if (result?.exists && result?.jid) {
+                                sendJid = result.jid;
+                                logOk('✅', 'JID', `Resolved to: ${sendJid}`);
+                            } else {
+                                throw new Error('Number not found on WhatsApp');
+                            }
+                        } catch (jidErr) {
+                            logWarn('⚠️ ', 'JID', `Lookup failed (${jidErr.message}), falling back to normalized user JID`);
+                            sendJid = jidNormalizedUser(sock.user.id);
+                            logWarn('⚠️ ', 'JID', `Fallback JID: ${sendJid}`);
+                        }
+
+                        log('📤', 'WHATSAPP', `Sending session ID to ${sendJid}...`);
+                        const sent = await sock.sendMessage(sendJid, { text: sessionId });
+                        await sock.sendMessage(sendJid, { text: MESSAGE }, { quoted: sent });
                         logOk('🎊', 'DONE', 'Session ID and welcome message delivered!');
 
                         await delay(1000);
