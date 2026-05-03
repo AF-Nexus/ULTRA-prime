@@ -39,15 +39,47 @@ function logOk(e, l, m)   { console.log(`${C.cyan}[${ts()}]${C.reset} ${e}  ${C.
 function logWarn(e, l, m) { console.log(`${C.cyan}[${ts()}]${C.reset} ${e}  ${C.bright}${C.yellow}${l}${C.reset}: ${m}`); }
 function logErr(e, l, m)  { console.log(`${C.cyan}[${ts()}]${C.reset} ${e}  ${C.bright}${C.red}${l}${C.reset}: ${m}`); }
 
-// ✅ FIX 1: Silent logger with child() override
-// Baileys internally calls logger.child({}) in many places.
-// Without this, those child instances use default pino level and leak debug logs.
+// Silent logger — overrides child() so Baileys internals don't leak debug logs
 const silentLogger = pino({ level: 'silent' });
 silentLogger.child = () => silentLogger;
 
 // Ensure auth dir is clean on startup
 if (fs.existsSync(AUTH_DIR)) {
     fs.emptyDirSync(AUTH_DIR);
+}
+
+// ─── Shared socket config factory ────────────────────────────────────────────
+// Centralised so both startPairing() and startSession() always use identical settings.
+function buildSocketConfig(version, state) {
+    return {
+        version,
+        auth: state,
+        logger: silentLogger,
+        printQRInTerminal: false,
+
+        // ✅ FIXED: Ubuntu Chrome — most stable, least flagged by WhatsApp servers.
+        // Safari triggers aggressive re-auth checks which cause frequent logouts.
+        browser: ['Ubuntu', 'Chrome', '124.0.6367.82'],
+
+        // ✅ FIXED: Longer keep-alive to reduce unnecessary pings
+        keepAliveIntervalMs: 30_000,
+
+        connectTimeoutMs: 60_000,
+        retryRequestDelayMs: 250,
+        maxMsgRetryCount: 5,
+
+        // ✅ FIXED: Disable internal query timeouts — prevents silent connection drops
+        // when WhatsApp is slow to respond
+        defaultQueryTimeoutMs: 0,
+
+        markOnlineOnConnect: false,
+        fireInitQueries: true,
+        generateHighQualityLinkPreview: false,
+        syncFullHistory: false,
+
+        // ✅ ADDED: Don't emit events for your own sent messages — reduces noise
+        emitOwnEvents: false,
+    };
 }
 
 router.get('/', async (req, res) => {
@@ -81,16 +113,15 @@ router.get('/', async (req, res) => {
     try {
         log('📦', 'BAILEYS', 'Loading @whiskeysockets/baileys...');
 
-        // ✅ FIX 2: Baileys v7 is ESM-only. Must use dynamic import(), NOT require().
+        // Baileys v7 is ESM-only — must use dynamic import(), NOT require()
         const {
             default: makeWASocket,
             useMultiFileAuthState,
             delay,
             fetchLatestBaileysVersion,
             makeCacheableSignalKeyStore,
-            Browsers,
             DisconnectReason,
-            jidNormalizedUser,  // ✅ v7: strips device suffix from JIDs (e.g. 263712345678:5 → 263712345678@s.whatsapp.net)
+            jidNormalizedUser,
         } = await import('@whiskeysockets/baileys');
 
         logOk('✅', 'BAILEYS', 'Module loaded.');
@@ -101,30 +132,16 @@ router.get('/', async (req, res) => {
 
         let sessionUploaded = false;
 
-        // ─── PHASE 1: Pairing — request code and return it ──────────────────
+        // ─── PHASE 1: Pairing — request code and return it ───────────────────
         async function startPairing() {
             log('🔐', 'AUTH STATE', 'Loading auth state...');
             const { state, saveCreds } = await useMultiFileAuthState(AUTH_DIR);
 
             log('🔌', 'SOCKET', 'Creating socket for pairing...');
-            const sock = makeWASocket({
-                version,
-                auth: {
-                    creds: state.creds,
-                    keys: makeCacheableSignalKeyStore(state.keys, silentLogger),
-                },
-                logger: silentLogger,
-                printQRInTerminal: false,
-                keepAliveIntervalMs: 10_000,
-                connectTimeoutMs: 60_000,
-                retryRequestDelayMs: 250,
-                maxMsgRetryCount: 5,
-                browser: Browsers.macOS('Safari'),
-                markOnlineOnConnect: false,
-                fireInitQueries: true,
-                generateHighQualityLinkPreview: false,
-                syncFullHistory: false,
-            });
+            const sock = makeWASocket(buildSocketConfig(version, {
+                creds: state.creds,
+                keys: makeCacheableSignalKeyStore(state.keys, silentLogger),
+            }));
 
             sock.ev.on('creds.update', saveCreds);
 
@@ -186,24 +203,10 @@ router.get('/', async (req, res) => {
             logOk('✅', 'SESSION', `Auth loaded. Registered: ${C.green}${state.creds.registered}${C.reset}`);
 
             log('🔌', 'SESSION', 'Creating session socket...');
-            const sock = makeWASocket({
-                version,
-                auth: {
-                    creds: state.creds,
-                    keys: makeCacheableSignalKeyStore(state.keys, silentLogger),
-                },
-                logger: silentLogger,
-                printQRInTerminal: false,
-                keepAliveIntervalMs: 10_000,
-                connectTimeoutMs: 60_000,
-                retryRequestDelayMs: 250,
-                maxMsgRetryCount: 5,
-                browser: Browsers.macOS('Safari'),
-                markOnlineOnConnect: false,
-                fireInitQueries: true,
-                generateHighQualityLinkPreview: false,
-                syncFullHistory: false,
-            });
+            const sock = makeWASocket(buildSocketConfig(version, {
+                creds: state.creds,
+                keys: makeCacheableSignalKeyStore(state.keys, silentLogger),
+            }));
 
             sock.ev.on('creds.update', saveCreds);
 
@@ -246,13 +249,9 @@ router.get('/', async (req, res) => {
                         const sessionId = await uploadToPastebin(credsFile, 'creds.json', 'json', '1');
                         logOk('✅', 'PASTEBIN', `Done! Session ID: ${C.green}${C.bright}${sessionId}${C.reset}`);
 
-                        // ✅ FIX 3: v7 LID system broke direct use of sock.user.id for sendMessage.
-                        // sock.user.id may now be a LID (e.g. 12345@lid) instead of a PN JID.
-                        // Sending to a LID directly causes messages to get stuck as PENDING.
-                        // Strategy:
-                        //   1. Try onWhatsApp() to resolve the real PN JID from the phone number.
-                        //   2. If that fails, fall back to jidNormalizedUser(sock.user.id)
-                        //      which at least strips the device suffix (:0, :5 etc).
+                        // v7 LID system: sock.user.id may be a LID, not a PN JID.
+                        // Sending to a LID causes messages stuck as PENDING.
+                        // Use onWhatsApp() to resolve the real JID first.
                         let sendJid;
                         try {
                             log('🔍', 'JID', `Resolving PN JID for +${num}...`);
