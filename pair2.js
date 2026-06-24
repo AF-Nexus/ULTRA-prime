@@ -1,27 +1,38 @@
+
 const express = require('express');
 const fs = require('fs-extra');
 const path = require('path');
 const { exec } = require('child_process');
 const pino = require('pino');
+const zlib = require('zlib');
 const { Boom } = require('@hapi/boom');
-const uploadToPastebin = require('./Paste');
+const fetch = require('node-fetch');
 
 let router = express.Router();
 
-const MESSAGE = process.env.MESSAGE || `
-🚀 *_Wagoat~qwnqmnwi Session Activated_* 💻
+const MESSAGE = process.env.WAGOAT_MESSAGE || `
+🐐 *_Wagoat Session Activated_* ⚡
 
 ╭─❒ *🎉 SESSION INFO* ❒
 ├⬡ 🆔 Session ID successfully generated!
-├⬡ 🤖 Bot: Wagoat~qwnqmnwi
-├⬡ 😎 Welcome to the next-gen experience!
+├⬡ 🤖 Bot: Wagoat
+├⬡ 😎 Welcome aboard!
 ╰────────────❒
 
-> ✅ Thank you for choosing *Wagoat~qwnqmnwi*!
+> ✅ Thank you for choosing *Wagoat*!
 > 🔒 Your session is now active and secured
-> Thank you for choosing Wagoat~qwnqmnwi`;
+> 👑 By Romeo Calyx X Frank Kaumba Dev`;
 
 const AUTH_DIR = path.join(__dirname, 'auth_info_baileys_wagoat');
+
+const PASTEBIN_KEYS = [
+    'Pe8nyDTO5Jm4ZdKo3qlbKjaFSP53srbT',
+    'c7Jo_q9xvCMAQsj1qihjLJBMBY2Er5--',
+    'KpoS0JysNXgUSgCWH2hr__2OG7aJ30S_',
+    'furii3L3ijdpwYB-vZ_jej7CxvNjFESk',
+    'PS0uqmRdEQ3mSqNWD28lccEmQMz-eu7',
+    '9L_JkdEp6u4yAa3Dwi9gnYxvZ2_HrXj-'
+];
 
 const C = {
     reset:  '\x1b[0m',
@@ -39,45 +50,74 @@ function logOk(e, l, m)   { console.log(`${C.cyan}[${ts()}]${C.reset} ${e}  ${C.
 function logWarn(e, l, m) { console.log(`${C.cyan}[${ts()}]${C.reset} ${e}  ${C.bright}${C.yellow}${l}${C.reset}: ${m}`); }
 function logErr(e, l, m)  { console.log(`${C.cyan}[${ts()}]${C.reset} ${e}  ${C.bright}${C.red}${l}${C.reset}: ${m}`); }
 
-// Silent logger — overrides child() so Baileys internals don't leak debug logs
+async function uploadWagoatSession(credsFilePath) {
+    const content = fs.readFileSync(credsFilePath, 'utf8');
+
+    const compressed = zlib.deflateSync(Buffer.from(content, 'utf8'));
+    const base64 = compressed.toString('base64');
+    const sessionId = `Wagoat~${base64}`;
+
+    let lastError = null;
+
+    for (let i = 0; i < PASTEBIN_KEYS.length; i++) {
+        log('📡', 'PASTEBIN', `Trying API key ${i + 1}/${PASTEBIN_KEYS.length}...`);
+        try {
+            const body = new URLSearchParams();
+            body.append('api_dev_key', PASTEBIN_KEYS[i]);
+            body.append('api_option', 'paste');
+            body.append('api_paste_code', sessionId);
+            body.append('api_paste_name', 'Wagoat-Session');
+            body.append('api_paste_format', 'text');
+            body.append('api_paste_private', '1');
+            body.append('api_paste_expire_date', 'N');
+
+            const response = await fetch('https://pastebin.com/api/api_post.php', {
+                method: 'POST',
+                body,
+                headers: { 'Content-Type': 'application/x-www-form-urlencoded' }
+            });
+
+            const text = await response.text();
+
+            if (!text.startsWith('https://pastebin.com/')) {
+                throw new Error(`Pastebin rejected: ${text}`);
+            }
+
+            logOk('✅', 'PASTEBIN', `Uploaded! URL: ${text.trim()}`);
+            return sessionId;
+
+        } catch (err) {
+            logErr('❌', 'PASTEBIN', `Key ${i + 1} failed: ${err.message}`);
+            lastError = err;
+        }
+    }
+
+    throw new Error(`All Pastebin keys failed. Last: ${lastError?.message}`);
+}
+
 const silentLogger = pino({ level: 'silent' });
 silentLogger.child = () => silentLogger;
 
-// Ensure auth dir is clean on startup
 if (fs.existsSync(AUTH_DIR)) {
     fs.emptyDirSync(AUTH_DIR);
 }
 
-// ─── Shared socket config factory ────────────────────────────────────────────
-// Centralised so both startPairing() and startSession() always use identical settings.
 function buildSocketConfig(version, state) {
     return {
         version,
         auth: state,
         logger: silentLogger,
         printQRInTerminal: false,
-
-        // ✅ FIXED: Ubuntu Chrome — most stable, least flagged by WhatsApp servers.
-        // Safari triggers aggressive re-auth checks which cause frequent logouts.
         browser: ['Ubuntu', 'Chrome', '124.0.6367.82'],
-
-        // ✅ FIXED: Longer keep-alive to reduce unnecessary pings
         keepAliveIntervalMs: 30_000,
-
         connectTimeoutMs: 60_000,
         retryRequestDelayMs: 250,
         maxMsgRetryCount: 5,
-
-        // ✅ FIXED: Disable internal query timeouts — prevents silent connection drops
-        // when WhatsApp is slow to respond
         defaultQueryTimeoutMs: 0,
-
         markOnlineOnConnect: false,
         fireInitQueries: true,
         generateHighQualityLinkPreview: false,
         syncFullHistory: false,
-
-        // ✅ ADDED: Don't emit events for your own sent messages — reduces noise
         emitOwnEvents: false,
     };
 }
@@ -85,22 +125,16 @@ function buildSocketConfig(version, state) {
 router.get('/', async (req, res) => {
     let num = req.query.number;
 
-    if (!num) {
-        return res.status(400).json({ error: 'Phone number is required. Use ?number=2637XXXXXXXX' });
-    }
+    if (!num) return res.status(400).json({ error: 'Phone number is required.' });
 
     num = num.replace(/[^0-9]/g, '');
 
-    if (num.length < 7) {
-        return res.status(400).json({ error: 'Invalid phone number.' });
-    }
+    if (num.length < 7) return res.status(400).json({ error: 'Invalid phone number.' });
 
     log('📞', 'PAIR REQUEST', `Incoming pairing request for +${num}`);
 
-    // Clean auth dir per request
     try {
         if (fs.existsSync(AUTH_DIR)) {
-            log('🗑️ ', 'AUTH DIR', 'Clearing old session files...');
             fs.emptyDirSync(AUTH_DIR);
         } else {
             fs.mkdirSync(AUTH_DIR, { recursive: true });
@@ -111,9 +145,6 @@ router.get('/', async (req, res) => {
     }
 
     try {
-        log('📦', 'BAILEYS', 'Loading @whiskeysockets/baileys...');
-
-        // Baileys v7 is ESM-only — must use dynamic import(), NOT require()
         const {
             default: makeWASocket,
             useMultiFileAuthState,
@@ -124,20 +155,14 @@ router.get('/', async (req, res) => {
             jidNormalizedUser,
         } = await import('@whiskeysockets/baileys');
 
-        logOk('✅', 'BAILEYS', 'Module loaded.');
-
-        log('🌐', 'VERSION', 'Fetching latest WhatsApp Web version...');
         const { version, isLatest } = await fetchLatestBaileysVersion();
         logOk('✅', 'VERSION', `WhatsApp v${version.join('.')} — isLatest: ${isLatest}`);
 
         let sessionUploaded = false;
 
-        // ─── PHASE 1: Pairing — request code and return it ───────────────────
         async function startPairing() {
-            log('🔐', 'AUTH STATE', 'Loading auth state...');
             const { state, saveCreds } = await useMultiFileAuthState(AUTH_DIR);
 
-            log('🔌', 'SOCKET', 'Creating socket for pairing...');
             const sock = makeWASocket(buildSocketConfig(version, {
                 creds: state.creds,
                 keys: makeCacheableSignalKeyStore(state.keys, silentLogger),
@@ -145,48 +170,37 @@ router.get('/', async (req, res) => {
 
             sock.ev.on('creds.update', saveCreds);
 
-            log('⏳', 'PAIRING', 'Waiting for socket to be ready...');
             await delay(2000);
 
             try {
-                log('⏳', 'PAIRING', `Requesting pairing code for +${num}...`);
                 const code = await sock.requestPairingCode(num);
                 const formatted = code?.match(/.{1,4}/g)?.join('-') || code;
                 logOk('🎯', 'PAIRING', `Code ready: ${C.yellow}${C.bright}${formatted}${C.reset}`);
-                if (!res.headersSent) {
-                    res.json({ code: formatted });
-                }
+                if (!res.headersSent) res.json({ code: formatted });
             } catch (err) {
                 logErr('❌', 'PAIRING', `Failed to get pairing code: ${err.message}`);
-                if (!res.headersSent) {
-                    res.status(500).json({ error: 'Could not generate pairing code. Try again.' });
-                }
+                if (!res.headersSent) res.status(500).json({ error: 'Could not generate pairing code. Try again.' });
                 return;
             }
 
             sock.ev.on('connection.update', async (update) => {
                 const { connection, lastDisconnect, isNewLogin, receivedPendingNotifications } = update;
 
-                if (connection)                   log('🔄', 'CONNECTION', `State → ${C.bright}${connection.toUpperCase()}${C.reset}`);
-                if (isNewLogin)                   logOk('🆕', 'LOGIN', 'New login detected!');
-                if (receivedPendingNotifications) log('📬', 'NOTIFICATIONS', 'Received pending notifications.');
+                if (connection) log('🔄', 'CONNECTION', `State → ${C.bright}${connection.toUpperCase()}${C.reset}`);
+                if (isNewLogin) logOk('🆕', 'LOGIN', 'New login detected!');
+                if (receivedPendingNotifications) log('📬', 'NOTIFICATIONS', 'Pending notifications received.');
 
-                if (connection === 'open') {
-                    logOk('🎉', 'CONNECTED', 'Pairing socket connected!');
-                }
+                if (connection === 'open') logOk('🎉', 'CONNECTED', 'Pairing socket connected!');
 
                 if (connection === 'close') {
                     const statusCode = new Boom(lastDisconnect?.error)?.output?.statusCode;
-                    const errMsg = lastDisconnect?.error?.message || 'Unknown';
-                    logErr('🔴', 'DISCONNECTED', `Code: ${statusCode} — ${errMsg}`);
+                    logErr('🔴', 'DISCONNECTED', `Code: ${statusCode}`);
 
                     if (statusCode === DisconnectReason.restartRequired) {
-                        // WhatsApp forces a reconnect after pairing — move to session phase
                         logWarn('🔁', 'RECONNECT', 'Restart required — launching session phase...');
                         await delay(2000);
                         startSession().catch(err => logErr('❌', 'SESSION ERROR', err.message));
                     } else {
-                        logWarn('⚠️ ', 'DISCONNECT', `Unexpected close (${statusCode}). Restarting pm2...`);
                         await delay(5000);
                         exec('pm2 restart wagoat');
                     }
@@ -194,15 +208,12 @@ router.get('/', async (req, res) => {
             });
         }
 
-        // ─── PHASE 2: Session — reconnect with saved creds, upload, and DM ──
         async function startSession() {
             if (sessionUploaded) return;
 
-            log('🔐', 'SESSION', 'Loading saved auth state for session...');
             const { state, saveCreds } = await useMultiFileAuthState(AUTH_DIR);
-            logOk('✅', 'SESSION', `Auth loaded. Registered: ${C.green}${state.creds.registered}${C.reset}`);
+            logOk('✅', 'SESSION', `Auth loaded. Registered: ${state.creds.registered}`);
 
-            log('🔌', 'SESSION', 'Creating session socket...');
             const sock = makeWASocket(buildSocketConfig(version, {
                 creds: state.creds,
                 keys: makeCacheableSignalKeyStore(state.keys, silentLogger),
@@ -211,19 +222,16 @@ router.get('/', async (req, res) => {
             sock.ev.on('creds.update', saveCreds);
 
             sock.ev.on('connection.update', async (update) => {
-                const { connection, lastDisconnect, isNewLogin, receivedPendingNotifications } = update;
+                const { connection, lastDisconnect } = update;
 
-                if (connection)                   log('🔄', 'SESSION', `State → ${C.bright}${connection.toUpperCase()}${C.reset}`);
-                if (isNewLogin)                   logOk('🆕', 'SESSION', 'New login confirmed!');
-                if (receivedPendingNotifications) log('📬', 'SESSION', 'Received pending notifications.');
+                if (connection) log('🔄', 'SESSION', `State → ${C.bright}${connection.toUpperCase()}${C.reset}`);
 
                 if (connection === 'open' && !sessionUploaded) {
                     sessionUploaded = true;
                     logOk('🎉', 'SESSION', 'Session socket OPEN!');
-                    log('👤', 'USER', `Logged in as: ${C.green}${sock.user?.id}${C.reset} — Name: ${sock.user?.name || 'Unknown'}`);
+                    log('👤', 'USER', `Logged in as: ${C.green}${sock.user?.id}${C.reset}`);
 
                     try {
-                        log('⏳', 'UPLOAD', 'Waiting 10s for creds to finish writing...');
                         await delay(10000);
 
                         const credsFile = path.join(AUTH_DIR, 'creds.json');
@@ -241,34 +249,25 @@ router.get('/', async (req, res) => {
 
                         if (!found) throw new Error('creds.json never written after 8 retries.');
 
-                        log('📡', 'PRESENCE', 'Sending presence update...');
                         await sock.sendPresenceUpdate('available');
-                        logOk('✅', 'PRESENCE', 'Presence sent.');
 
-                        log('🚀', 'PASTEBIN', 'Uploading creds.json to Pastebin...');
-                        const sessionId = await uploadToPastebin(credsFile, 'creds.json', 'json', '1');
-                        logOk('✅', 'PASTEBIN', `Done! Session ID: ${C.green}${C.bright}${sessionId}${C.reset}`);
+                        log('🚀', 'UPLOAD', 'Compressing and uploading session as Wagoat~ format...');
+                        const sessionId = await uploadWagoatSession(credsFile);
+                        logOk('✅', 'UPLOAD', `Done! Session ID starts with: Wagoat~...`);
 
-                        // v7 LID system: sock.user.id may be a LID, not a PN JID.
-                        // Sending to a LID causes messages stuck as PENDING.
-                        // Use onWhatsApp() to resolve the real JID first.
                         let sendJid;
                         try {
-                            log('🔍', 'JID', `Resolving PN JID for +${num}...`);
                             const [result] = await sock.onWhatsApp(`${num}@s.whatsapp.net`);
                             if (result?.exists && result?.jid) {
                                 sendJid = result.jid;
-                                logOk('✅', 'JID', `Resolved to: ${sendJid}`);
                             } else {
                                 throw new Error('Number not found on WhatsApp');
                             }
                         } catch (jidErr) {
-                            logWarn('⚠️ ', 'JID', `Lookup failed (${jidErr.message}), falling back to normalized user JID`);
+                            logWarn('⚠️', 'JID', `Lookup failed — using fallback`);
                             sendJid = jidNormalizedUser(sock.user.id);
-                            logWarn('⚠️ ', 'JID', `Fallback JID: ${sendJid}`);
                         }
 
-                        log('📤', 'WHATSAPP', `Sending session ID to ${sendJid}...`);
                         const sent = await sock.sendMessage(sendJid, { text: sessionId });
                         await sock.sendMessage(sendJid, { text: MESSAGE }, { quoted: sent });
                         logOk('🎊', 'DONE', 'Session ID and welcome message delivered!');
@@ -279,25 +278,20 @@ router.get('/', async (req, res) => {
                         logErr('❌', 'UPLOAD ERROR', e.message);
                     }
 
-                    log('🧹', 'CLEANUP', 'Clearing auth directory...');
                     try { fs.emptyDirSync(AUTH_DIR); } catch (e) {}
-                    logOk('✅', 'CLEANUP', 'Done.');
+                    logOk('✅', 'CLEANUP', 'Auth directory cleared.');
                 }
 
                 if (connection === 'close') {
                     const statusCode = new Boom(lastDisconnect?.error)?.output?.statusCode;
-                    const errMsg = lastDisconnect?.error?.message || 'Unknown';
-                    logErr('🔴', 'SESSION CLOSED', `Code: ${statusCode} — ${errMsg}`);
+                    logErr('🔴', 'SESSION CLOSED', `Code: ${statusCode}`);
 
                     if (statusCode === DisconnectReason.restartRequired) {
-                        logWarn('🔁', 'SESSION', 'Restart required again — retrying session...');
                         await delay(2000);
-                        startSession().catch(err => logErr('❌', 'SESSION RETRY ERROR', err.message));
+                        startSession().catch(err => logErr('❌', 'SESSION RETRY', err.message));
                     } else if (statusCode === DisconnectReason.loggedOut) {
-                        logWarn('🚪', 'SESSION', 'Logged out. Clearing auth...');
                         try { fs.emptyDirSync(AUTH_DIR); } catch (e) {}
                     } else {
-                        logWarn('⚠️ ', 'SESSION', `Unexpected close (${statusCode}). Restarting pm2...`);
                         await delay(5000);
                         exec('pm2 restart wagoat');
                     }
@@ -305,16 +299,12 @@ router.get('/', async (req, res) => {
             });
         }
 
-        // Kick off pairing phase
         await startPairing();
 
     } catch (err) {
         logErr('💥', 'FATAL', err.message);
-        console.error(err);
         try { fs.emptyDirSync(AUTH_DIR); } catch (e) {}
-        if (!res.headersSent) {
-            res.status(500).json({ error: 'Internal server error. Try again.' });
-        }
+        if (!res.headersSent) res.status(500).json({ error: 'Internal server error. Try again.' });
     }
 });
 
