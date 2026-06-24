@@ -3,503 +3,445 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Wagoat~qwnqmnwi || PAIR CODE</title>
+  <title>Wagoat || PAIR CODE</title>
   <link rel="shortcut icon" type="x-icon" href="https://files.catbox.moe/oifwcm.jpg">
-  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
-  <meta http-equiv="X-UA-Compatible" content="IE=edge">
   <style>
     @import url('https://fonts.googleapis.com/css2?family=Rajdhani:wght@300;400;500;600;700&display=swap');
     @import url('https://fonts.googleapis.com/css2?family=Orbitron:wght@400;500;600;700;800;900&display=swap');
-    
+
     :root {
-      --primary: #0cffe1;
-      --secondary: #00a6ff;
-      --accent: #ff00b3;
+      --primary: #ff00b3;
+      --secondary: #ff6b00;
       --dark: #0a0a14;
       --darker: #050508;
       --text: #e0e0ff;
     }
-    
-    * {
-      margin: 0;
-      padding: 0;
-      box-sizing: border-box;
-    }
-    
+
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+
     body {
       font-family: 'Rajdhani', sans-serif;
-      height: 100vh;
-      margin: 0;
-      background-color: var(--darker);
+      min-height: 100vh;
+      background: var(--darker);
       display: flex;
+      flex-direction: column;
       justify-content: center;
       align-items: center;
       position: relative;
       overflow: hidden;
+      color: var(--text);
     }
-    
-    .background {
+
+    .bg {
       position: fixed;
-      top: 0;
-      left: 0;
-      width: 100%;
-      height: 100%;
-      z-index: -2;
-      background: radial-gradient(circle at center, rgba(0, 50, 80, 0.5) 0%, rgba(5, 5, 15, 0.95) 70%);
+      inset: 0;
+      background:
+        radial-gradient(ellipse at 30% 40%, rgba(255,0,179,0.08) 0%, transparent 55%),
+        radial-gradient(ellipse at 70% 60%, rgba(255,107,0,0.06) 0%, transparent 55%);
+      z-index: 0;
     }
-    
+
     .grid {
       position: fixed;
-      top: 0;
-      left: 0;
-      width: 100%;
-      height: 100%;
-      background-image: 
-        linear-gradient(rgba(12, 255, 225, 0.05) 1px, transparent 1px),
-        linear-gradient(90deg, rgba(12, 255, 225, 0.05) 1px, transparent 1px);
-      background-size: 30px 30px;
-      z-index: -1;
+      inset: 0;
+      background-image:
+        linear-gradient(rgba(255,0,179,0.04) 1px, transparent 1px),
+        linear-gradient(90deg, rgba(255,0,179,0.04) 1px, transparent 1px);
+      background-size: 40px 40px;
+      z-index: 0;
     }
-    
-    .container {
-      width: 100%;
-      display: flex;
-      flex-direction: column;
-      align-items: center;
-      justify-content: center;
-      z-index: 1;
-    }
-    
-    .logo {
-      margin-bottom: 1.5rem;
+
+    /* Header */
+    .header {
+      position: relative;
+      z-index: 2;
       text-align: center;
+      margin-bottom: 2rem;
     }
-    
-    .logo h1 {
+
+    .header h1 {
       font-family: 'Orbitron', sans-serif;
       font-size: 2rem;
-      font-weight: 700;
-      background: linear-gradient(90deg, var(--primary), var(--secondary), var(--accent));
+      font-weight: 800;
+      background: linear-gradient(90deg, var(--primary), var(--secondary));
       -webkit-background-clip: text;
       background-clip: text;
       color: transparent;
-      letter-spacing: 2px;
-      margin-bottom: 0.5rem;
-      text-shadow: 0 0 10px rgba(12, 255, 225, 0.3);
+      letter-spacing: 3px;
+      margin-bottom: 0.3rem;
+      filter: drop-shadow(0 0 15px rgba(255,0,179,0.4));
     }
-    
-    .logo p {
-      color: var(--text);
-      font-size: 1rem;
-      opacity: 0.8;
+
+    .header p {
+      font-size: 0.9rem;
+      opacity: 0.5;
+      letter-spacing: 1.5px;
+      text-transform: uppercase;
     }
-    
-    .main {
-      width: 100%;
-      max-width: 400px;
-    }
-    
-    .box {
-      width: 100%;
-      padding: 2rem;
+
+    /* Card */
+    .card {
       position: relative;
-      text-align: center;
-      background: rgba(10, 10, 20, 0.7);
-      backdrop-filter: blur(10px);
+      z-index: 2;
+      width: 100%;
+      max-width: 420px;
+      margin: 0 1.5rem;
+      background: rgba(10,10,20,0.8);
+      backdrop-filter: blur(20px);
       border-radius: 20px;
-      box-shadow: 0 10px 30px rgba(0, 0, 0, 0.3);
-      border: 1px solid rgba(12, 255, 225, 0.2);
+      border: 1px solid rgba(255,0,179,0.15);
       overflow: hidden;
-      transition: all 0.3s ease;
+      transition: box-shadow 0.3s ease;
     }
-    
-    .box:hover {
-      box-shadow: 0 15px 40px rgba(0, 0, 0, 0.4), 0 0 20px rgba(12, 255, 225, 0.2);
-      transform: translateY(-5px);
+
+    .card:hover {
+      box-shadow: 0 0 60px rgba(255,0,179,0.15);
     }
-    
-    .glow {
-      position: absolute;
-      top: -50%;
-      left: -50%;
-      width: 200%;
-      height: 200%;
-      background: radial-gradient(
-        circle at center,
-        rgba(12, 255, 225, 0.1) 0%,
-        rgba(0, 166, 255, 0.05) 30%,
-        transparent 70%
-      );
-      z-index: -1;
-      pointer-events: none;
+
+    /* Top gradient line */
+    .card-line {
+      height: 3px;
+      background: linear-gradient(90deg, var(--primary), var(--secondary));
     }
-    
-    #text {
-      color: var(--text);
-    }
-    
-    .centered-text {
-      color: var(--text);
-      font-size: 1.5rem;
-      font-weight: 600;
-      margin-bottom: 1rem;
-    }
-    
-    h6 {
-      color: var(--text);
-      font-size: 1rem;
-      font-weight: 500;
-      margin-bottom: 1.5rem;
-      opacity: 0.8;
-    }
-    
-    .whatsapp {
-      color: #25D366;
-      font-style: normal;
-      font-weight: 600;
-    }
-    
-    .input-container {
-      display: flex;
+
+    /* Banner */
+    .card-banner {
       width: 100%;
-      margin-bottom: 1.5rem;
-      gap: 0.5rem;
+      height: 140px;
       position: relative;
+      overflow: hidden;
     }
-    
-    .input-container input {
+
+    .card-banner img {
+      width: 100%;
+      height: 100%;
+      object-fit: cover;
+      filter: brightness(0.5);
+    }
+
+    .banner-overlay {
+      position: absolute;
+      inset: 0;
+      background: linear-gradient(to bottom, transparent 20%, rgba(10,10,20,0.95) 100%);
+    }
+
+    /* Avatar on banner */
+    .card-avatar {
+      position: absolute;
+      bottom: -28px;
+      left: 50%;
+      transform: translateX(-50%);
+      width: 64px;
+      height: 64px;
+      border-radius: 50%;
+      border: 3px solid rgba(255,0,179,0.5);
+      overflow: hidden;
+      box-shadow: 0 0 20px rgba(255,0,179,0.4);
+    }
+
+    .card-avatar img {
+      width: 100%;
+      height: 100%;
+      object-fit: cover;
+    }
+
+    /* Body */
+    .card-body {
+      padding: 2.5rem 2rem 2rem;
+      text-align: center;
+    }
+
+    .bot-name {
+      font-family: 'Orbitron', sans-serif;
+      font-size: 1.3rem;
+      font-weight: 800;
+      color: var(--primary);
+      letter-spacing: 2px;
+      margin-bottom: 0.2rem;
+      text-shadow: 0 0 15px rgba(255,0,179,0.4);
+    }
+
+    .bot-credit {
+      font-size: 0.75rem;
+      opacity: 0.4;
+      letter-spacing: 1.5px;
+      text-transform: uppercase;
+      margin-bottom: 1.5rem;
+    }
+
+    .instruction {
+      font-size: 0.95rem;
+      opacity: 0.65;
+      margin-bottom: 1.5rem;
+      line-height: 1.6;
+    }
+
+    .instruction span {
+      color: #25D366;
+      font-weight: 600;
+    }
+
+    /* Input row */
+    .input-row {
+      display: flex;
+      gap: 0.6rem;
+      margin-bottom: 1.5rem;
+    }
+
+    .input-row input {
       flex: 1;
-      background: rgba(255, 255, 255, 0.1);
-      border: 1px solid rgba(12, 255, 225, 0.3);
-      border-radius: 12px;
-      padding: 1rem;
+      background: rgba(255,255,255,0.06);
+      border: 1px solid rgba(255,0,179,0.25);
+      border-radius: 10px;
+      padding: 0.9rem 1rem;
       color: var(--text);
       font-family: 'Rajdhani', sans-serif;
       font-size: 1rem;
       transition: all 0.3s ease;
     }
-    
-    .input-container input:focus {
+
+    .input-row input:focus {
       outline: none;
       border-color: var(--primary);
-      box-shadow: 0 0 10px rgba(12, 255, 225, 0.4);
-      background: rgba(255, 255, 255, 0.15);
+      box-shadow: 0 0 15px rgba(255,0,179,0.25);
+      background: rgba(255,0,179,0.05);
     }
-    
-    .input-container input::placeholder {
-      color: rgba(224, 224, 255, 0.5);
+
+    .input-row input::placeholder {
+      color: rgba(224,224,255,0.35);
     }
-    
-    .input-container button {
+
+    .input-row button {
       background: linear-gradient(135deg, var(--primary), var(--secondary));
       border: none;
-      border-radius: 12px;
-      color: var(--dark);
+      border-radius: 10px;
+      color: #fff;
       font-family: 'Orbitron', sans-serif;
-      font-weight: 600;
-      padding: 0 1.5rem;
+      font-weight: 700;
+      font-size: 0.75rem;
+      letter-spacing: 1px;
+      padding: 0 1.2rem;
       cursor: pointer;
       transition: all 0.3s ease;
       position: relative;
       overflow: hidden;
-      min-width: 80px;
+      min-width: 90px;
     }
-    
-    .input-container button::before {
+
+    .input-row button::after {
       content: '';
       position: absolute;
-      top: 0;
-      left: -100%;
-      width: 100%;
-      height: 100%;
-      background: linear-gradient(90deg, 
-                  transparent, 
-                  rgba(255, 255, 255, 0.2), 
-                  transparent);
-      transition: all 0.5s ease;
+      top: 0; left: -100%;
+      width: 100%; height: 100%;
+      background: linear-gradient(90deg, transparent, rgba(255,255,255,0.2), transparent);
+      transition: left 0.4s ease;
     }
-    
-    .input-container button:hover {
-      box-shadow: 0 0 15px rgba(12, 255, 225, 0.5);
-      transform: translateY(-2px);
-    }
-    
-    .input-container button:hover::before {
-      left: 100%;
-    }
-    
-    #pair {
-      min-height: 60px;
+
+    .input-row button:hover { box-shadow: 0 0 20px rgba(255,0,179,0.5); }
+    .input-row button:hover::after { left: 100%; }
+
+    /* Result area */
+    #result {
+      min-height: 50px;
       display: flex;
       flex-direction: column;
       justify-content: center;
       align-items: center;
     }
-    
-    #copy {
-      cursor: pointer;
-      background: rgba(10, 10, 20, 0.7);
-      padding: 0.5rem 1.5rem;
+
+    #copy-box {
+      background: rgba(255,0,179,0.08);
+      border: 1px solid rgba(255,0,179,0.25);
       border-radius: 10px;
-      border: 1px solid rgba(12, 255, 225, 0.3);
+      padding: 0.8rem 1.5rem;
+      cursor: pointer;
+      font-size: 1.1rem;
+      font-weight: 700;
+      letter-spacing: 2px;
+      color: var(--primary);
       transition: all 0.3s ease;
-      display: inline-block;
+      display: none;
     }
-    
-    #copy:hover {
-      background: rgba(15, 15, 30, 0.8);
-      box-shadow: 0 0 15px rgba(12, 255, 225, 0.3);
-      transform: translateY(-2px);
+
+    #copy-box:hover {
+      background: rgba(255,0,179,0.15);
+      box-shadow: 0 0 20px rgba(255,0,179,0.3);
+      transform: scale(1.02);
     }
-    
-    /* Corner decorations */
-    .corner {
-      position: absolute;
-      width: 20px;
-      height: 20px;
-      border-color: var(--primary);
-      opacity: 0.8;
+
+    #copy-hint {
+      font-size: 0.78rem;
+      opacity: 0.4;
+      margin-top: 0.5rem;
+      display: none;
     }
-    
-    .corner-top-left {
-      top: 10px;
-      left: 10px;
-      border-top: 2px solid;
-      border-left: 2px solid;
+
+    #waiting {
+      font-size: 0.95rem;
+      opacity: 0.6;
+      display: none;
+      gap: 8px;
+      align-items: center;
     }
-    
-    .corner-top-right {
-      top: 10px;
-      right: 10px;
-      border-top: 2px solid;
-      border-right: 2px solid;
-    }
-    
-    .corner-bottom-left {
-      bottom: 10px;
-      left: 10px;
-      border-bottom: 2px solid;
-      border-left: 2px solid;
-    }
-    
-    .corner-bottom-right {
-      bottom: 10px;
-      right: 10px;
-      border-bottom: 2px solid;
-      border-right: 2px solid;
-    }
-    
-    /* Animated background elements */
-    .particles {
-      position: absolute;
-      top: 0;
-      left: 0;
-      width: 100%;
-      height: 100%;
-      overflow: hidden;
-      z-index: -1;
-    }
-    
-    .particle {
-      position: absolute;
-      width: 3px;
-      height: 3px;
-      background: var(--primary);
+
+    .spinner {
+      width: 16px; height: 16px;
+      border: 2px solid rgba(255,0,179,0.3);
+      border-top-color: var(--primary);
       border-radius: 50%;
-      opacity: 0.3;
-      animation: float 15s infinite linear;
+      animation: spin 0.8s linear infinite;
     }
-    
-    .particle:nth-child(1) {
-      top: 20%;
-      left: 10%;
-      animation-duration: 20s;
-    }
-    
-    .particle:nth-child(2) {
-      top: 70%;
-      left: 20%;
-      animation-duration: 25s;
-      animation-delay: 2s;
-    }
-    
-    .particle:nth-child(3) {
-      top: 30%;
-      left: 80%;
-      animation-duration: 18s;
-      animation-delay: 4s;
-    }
-    
-    .particle:nth-child(4) {
-      top: 60%;
-      left: 90%;
-      animation-duration: 22s;
-      animation-delay: 1s;
-    }
-    
-    .particle:nth-child(5) {
-      top: 10%;
-      left: 50%;
-      animation-duration: 28s;
-      animation-delay: 3s;
-    }
-    
-    @keyframes float {
-      0% {
-        transform: translate(0, 0) rotate(0deg);
-        opacity: 0.3;
-      }
-      50% {
-        opacity: 0.8;
-      }
-      100% {
-        transform: translate(200px, 200px) rotate(360deg);
-        opacity: 0.3;
-      }
-    }
-    
-    .footer {
-      position: fixed;
-      bottom: 20px;
-      left: 0;
-      width: 100%;
-      text-align: center;
-      color: var(--text);
-      opacity: 0.7;
+
+    @keyframes spin { to { transform: rotate(360deg); } }
+
+    #error-msg {
+      color: #ff4444;
       font-size: 0.9rem;
+      font-weight: 600;
+      display: none;
     }
-    
-    @media (max-width: 500px) {
-      .box {
-        width: 90%;
-        padding: 1.5rem;
-      }
-      
-      .input-container {
-        flex-direction: column;
-      }
-      
-      .input-container input {
-        width: 100%;
-        margin-bottom: 0.5rem;
-      }
-      
-      .input-container button {
-        width: 100%;
-        padding: 0.8rem;
-      }
-      
-      .logo h1 {
-        font-size: 1.8rem;
-      }
+
+    /* Corner accents */
+    .corner { position: absolute; width: 14px; height: 14px; border-color: var(--primary); opacity: 0.3; transition: opacity 0.3s; }
+    .card:hover .corner { opacity: 0.8; }
+    .corner-tl { top: 10px; left: 10px; border-top: 2px solid; border-left: 2px solid; }
+    .corner-tr { top: 10px; right: 10px; border-top: 2px solid; border-right: 2px solid; }
+    .corner-bl { bottom: 10px; left: 10px; border-bottom: 2px solid; border-left: 2px solid; }
+    .corner-br { bottom: 10px; right: 10px; border-bottom: 2px solid; border-right: 2px solid; }
+
+    /* Footer */
+    .footer {
+      position: relative;
+      z-index: 2;
+      text-align: center;
+      font-size: 0.78rem;
+      opacity: 0.3;
+      margin-top: 2rem;
+      padding-bottom: 2rem;
+      letter-spacing: 1px;
+    }
+
+    @media (max-width: 480px) {
+      .card { margin: 0 1rem; }
+      .input-row { flex-direction: column; }
+      .input-row button { padding: 0.9rem; }
+      .header h1 { font-size: 1.6rem; }
     }
   </style>
 </head>
 <body>
-  <div class="background"></div>
+  <div class="bg"></div>
   <div class="grid"></div>
-  
-  <div class="particles">
-    <div class="particle"></div>
-    <div class="particle"></div>
-    <div class="particle"></div>
-    <div class="particle"></div>
-    <div class="particle"></div>
+
+  <div class="header">
+    <h1>Wagoat</h1>
+    <p>WhatsApp Bot Pairing</p>
   </div>
-  
-  <div class="container">
-    <div class="logo">
-      <h1>Wagoat~qwnqmnwi</h1>
-      <p>Wagoat Bot Connection Portal</p>
+
+  <div class="card">
+    <div class="card-line"></div>
+    <div class="corner corner-tl"></div>
+    <div class="corner corner-tr"></div>
+    <div class="corner corner-bl"></div>
+    <div class="corner corner-br"></div>
+
+    <div class="card-banner">
+      <img src="https://files.catbox.moe/oifwcm.jpg" alt="Wagoat">
+      <div class="banner-overlay"></div>
+      <div class="card-avatar">
+        <img src="https://files.catbox.moe/oifwcm.jpg" alt="WG">
+      </div>
     </div>
-    
-    <div class="main">
-      <div class="box" id="box">
-        <div class="glow"></div>
-        <div class="corner corner-top-left"></div>
-        <div class="corner corner-top-right"></div>
-        <div class="corner corner-bottom-left"></div>
-        <div class="corner corner-bottom-right"></div>
-        
-        <div id="text">
-          <h3 class="centered-text">Link with your <i class="fa-brands fa-whatsapp whatsapp"></i> WhatsApp</h3>
-          
-          <h6>Enter your WhatsApp number with country code to generate a pairing code</h6>
-          
-          <div class="input-container">
-            <input placeholder="+265993xxxxxxx" type="number" id="number">
-            <button id="submit">CONNECT</button>
-          </div>
-          
-          <a id="waiting-message" class="centered-text" style="display: none;">Generating pairing code...</a>
-          
-          <main id="pair"></main>
-        </div>
+
+    <div class="card-body">
+      <div class="bot-name">WAGOAT</div>
+      <div class="bot-credit">Romeo Calyx X Frank Kaumba Dev</div>
+
+      <div class="instruction">
+        Enter your <span>WhatsApp</span> number with country code to get your pairing code
+      </div>
+
+      <div class="input-row">
+        <input type="number" id="number" placeholder="+265993xxxxxxx">
+        <button id="submit">CONNECT</button>
+      </div>
+
+      <div id="waiting">
+        <div class="spinner"></div>
+        Generating code...
+      </div>
+      <div id="error-msg"></div>
+
+      <div id="result">
+        <div id="copy-box" onclick="copyCode()"></div>
+        <div id="copy-hint">tap to copy</div>
       </div>
     </div>
   </div>
-  
+
   <div class="footer">
-    <p>© Frank Kaumba Dev | Wagoat~qwnqmnwi v1.0.0</p>
+    © Romeo Calyx X Frank Kaumba Dev | Wagoat v1.0.0
   </div>
-  
+
   <script src="https://cdnjs.cloudflare.com/ajax/libs/axios/1.0.0-alpha.1/axios.min.js"></script>
   <script>
-    let a = document.getElementById("pair");
-    let b = document.getElementById("submit");
-    let c = document.getElementById("number");
-    let box = document.getElementById("box");
-    let waitingMessage = document.getElementById("waiting-message");
+    const numInput = document.getElementById('number');
+    const submitBtn = document.getElementById('submit');
+    const waiting = document.getElementById('waiting');
+    const errorMsg = document.getElementById('error-msg');
+    const copyBox = document.getElementById('copy-box');
+    const copyHint = document.getElementById('copy-hint');
 
-    async function Copy() {
-      let text = document.getElementById("copy").innerText;
-      let obj = document.getElementById("copy");
-      await navigator.clipboard.writeText(obj.innerText.replace('CODE: ', ''));
-      obj.innerText = "✓ COPIED";
-      obj.style = "color: var(--primary); font-weight: bold;";
-      setTimeout(() => {
-        obj.innerText = text;
-        obj.style = "";
-      }, 1000);
+    function showError(msg) {
+      errorMsg.textContent = msg;
+      errorMsg.style.display = 'block';
+      waiting.style.display = 'none';
     }
 
-    b.addEventListener("click", async (e) => {
-      e.preventDefault();
-      if (!c.value) {
-        a.innerHTML = '<a style="color: var(--accent); font-weight: bold">Please enter your WhatsApp number with a country code</a>';
-      } else if (c.value.replace(/[^0-9]/g, "").length < 11) {
-        a.innerHTML = '<a style="color: var(--accent); font-weight: bold">Invalid number format. Please check and try again</a>';
-      } else {
-        waitingMessage.style.display = "block";
-        const phoneNumber = c.value.replace(/[^0-9]/g, "");
-        let formattedNumber = "";
-        let tempNumber = "";
-        const digits = phoneNumber.split('');
-        
-        digits.map(digit => {
-          tempNumber += digit;
-          if (tempNumber.length == 3) {
-            formattedNumber += " " + digit;
-          } else if (tempNumber.length == 8) {
-            formattedNumber += " " + digit;
-          } else {
-            formattedNumber += digit;
-          }
-        });
-        
-        c.type = "text";
-        c.value = "+" + formattedNumber;
-        c.style = "color: var(--primary); font-size: 18px; font-weight: 500;";
-        
-        try {
-          let { data } = await axios(`/code2?number=${phoneNumber}`);
-          waitingMessage.style.display = "none";
-          let code = data.code || "Service Unavailable";
-          a.innerHTML = '<div id="copy" onclick="Copy()" style="font-weight: bold; font-size: 1.2rem; margin-top: 1rem;">CODE: <span style="color: var(--primary); font-weight: bold">' + code + '</span></div><p style="margin-top: 1rem; font-size: 0.9rem; opacity: 0.7;">(Click to copy)</p>';
-        } catch (error) {
-          waitingMessage.style.display = "none";
-          a.innerHTML = '<a style="color: var(--accent); font-weight: bold">Connection error. Please try again later.</a>';
-        }
+    function hideAll() {
+      errorMsg.style.display = 'none';
+      copyBox.style.display = 'none';
+      copyHint.style.display = 'none';
+      waiting.style.display = 'none';
+    }
+
+    async function copyCode() {
+      const code = copyBox.dataset.code;
+      if (!code) return;
+      await navigator.clipboard.writeText(code);
+      const orig = copyBox.textContent;
+      copyBox.textContent = '✓ COPIED!';
+      setTimeout(() => { copyBox.textContent = orig; }, 1200);
+    }
+
+    submitBtn.addEventListener('click', async () => {
+      hideAll();
+      const raw = numInput.value.replace(/[^0-9]/g, '');
+
+      if (!raw) return showError('Please enter your WhatsApp number with country code.');
+      if (raw.length < 10) return showError('Number too short. Include your country code.');
+
+      waiting.style.display = 'flex';
+      submitBtn.disabled = true;
+
+      // Format display
+      numInput.type = 'text';
+      numInput.value = '+' + raw;
+      numInput.style.color = '#ff00b3';
+      numInput.style.fontWeight = '700';
+
+      try {
+        const { data } = await axios(`/code2?number=${raw}`);
+        waiting.style.display = 'none';
+        const code = data.code || 'Unavailable';
+        copyBox.textContent = code;
+        copyBox.dataset.code = code;
+        copyBox.style.display = 'block';
+        copyHint.style.display = 'block';
+      } catch (e) {
+        showError('Connection error. Please try again.');
+      } finally {
+        submitBtn.disabled = false;
       }
     });
   </script>
