@@ -5,6 +5,7 @@ const { exec } = require('child_process');
 const pino = require('pino');
 const zlib = require('zlib');
 const { Boom } = require('@hapi/boom');
+const fetch = require('node-fetch');
 
 let router = express.Router();
 
@@ -43,25 +44,24 @@ const PASTEBIN_KEYS = [
 ];
 
 async function uploadToPastebin(text) {
+    const axios = require('axios');
     let lastError = null;
     for (let i = 0; i < PASTEBIN_KEYS.length; i++) {
         try {
-            const body = new URLSearchParams();
-            body.append('api_dev_key', PASTEBIN_KEYS[i]);
-            body.append('api_option', 'paste');
-            body.append('api_paste_code', text);
-            body.append('api_paste_name', 'Wagoat-Session');
-            body.append('api_paste_format', 'text');
-            body.append('api_paste_private', '1');
-            body.append('api_paste_expire_date', 'N');
-            const response = await fetch('https://pastebin.com/api/api_post.php', {
-                method: 'POST',
-                body,
-                headers: { 'Content-Type': 'application/x-www-form-urlencoded' }
+            const params = new URLSearchParams();
+            params.append('api_dev_key', PASTEBIN_KEYS[i]);
+            params.append('api_option', 'paste');
+            params.append('api_paste_code', text);
+            params.append('api_paste_name', 'Wagoat-Session');
+            params.append('api_paste_format', 'text');
+            params.append('api_paste_private', '1');
+            params.append('api_paste_expire_date', 'N');
+            const { data } = await axios.post('https://pastebin.com/api/api_post.php', params.toString(), {
+                headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+                timeout: 15000
             });
-            const text2 = await response.text();
-            if (!text2.startsWith('https://pastebin.com/')) throw new Error(`Rejected: ${text2}`);
-            return text2.replace('https://pastebin.com/', '').trim();
+            if (!String(data).startsWith('https://pastebin.com/')) throw new Error(`Rejected: ${data}`);
+            return String(data).replace('https://pastebin.com/', '').trim();
         } catch (err) {
             lastError = err;
         }
